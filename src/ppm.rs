@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::fmt::Write;
 
 pub struct Ppm<'a> {
     width: usize,
@@ -29,6 +28,8 @@ impl Display for Ppm<'_> {
 
 #[test]
 fn test_to_string() {
+    use std::fmt::Write;
+
     let ppm = Ppm{width: 1, height: 1, pix: &vec![0, 127, 255]};
 
     let mut buf = String::new();

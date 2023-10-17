@@ -1,31 +1,44 @@
+#[macro_use]
 mod vec3;
-mod ppm;
-mod config;
+#[macro_use]
+mod ray;
+mod camera;
 mod color;
+mod config;
 mod film;
 mod hit;
+mod integrator;
+mod material;
+mod ppm;
+mod sampler;
+mod scene;
+mod sphere;
 mod util;
-mod ray;
 
-use std::fmt::{Write};
-use std::fs::{write, create_dir_all};
+/// le current todos
+/// - give objects materials
+/// - capture materials in hitrecords
+/// - implement scattering
 
-use vec3::{Point, Vec3};
-use film::Film;
-use config::Float;
-use ppm::Ppm;
+use std::fmt::Write;
+
+use crate::{
+    camera::Camera, film::Film, integrator::Integrator, ppm::Ppm, sampler::CenterSampler, scene::simple_scene,
+};
 
 fn main() {
     const WIDTH: usize = 300;
     const HEIGHT: usize = 200;
-    let mut f = Film::new(WIDTH, HEIGHT);
-    for x in 0..WIDTH {
-        for y in 0..HEIGHT {
-            f.write_pixel(x, y, (0.0 + (x as Float / WIDTH as Float), 1.0 - (y as Float / HEIGHT as Float), 1.0).into())
-        }
-    }
+    let mut film = Film::new(WIDTH, HEIGHT);
+
+    let cam = Camera::new(&film, vec3!(0, 0, 0), vec3!(0, 0, -1));
+    let sampler = CenterSampler {};
+    let scene = simple_scene();
+    let integrator = Integrator::new(&scene, &cam, &sampler);
+    integrator.dispatch(&mut film);
+
     let mut buf = String::new();
-    write!(buf, "{}", Ppm::new(WIDTH, HEIGHT, &f.to_rgb8())).unwrap();
-    std::fs::create_dir_all("out");
+    write!(buf, "{}", Ppm::new(WIDTH, HEIGHT, &film.to_rgb8())).unwrap();
+    std::fs::create_dir_all("out").unwrap();
     std::fs::write("out/out.ppm", buf).unwrap();
 }

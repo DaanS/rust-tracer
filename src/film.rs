@@ -1,17 +1,16 @@
 use crate::config::{Color, Float};
-use crate::color::{ColorRgb};
 
 use crate::util::clamp;
 
 // maybe move this elsewhere?
 pub fn map_color_component(comp: Float) -> u8 {
-    (clamp(comp, 0.0, 1.0) * 255 as Float) as u8
+    (clamp(comp, 0., 1.) * 255 as Float) as u8
 }
 
 pub struct Film {
-    width: usize,
-    height: usize,
-    pix: Vec<Color>
+    pub width: usize,
+    pub height: usize,
+    pub pix: Vec<Color>
 }
 
 impl Film {
@@ -38,7 +37,7 @@ impl Film {
 #[test]
 fn test() {
     let mut f = Film::new(2, 3);
-    f.write_pixel(0, 1, (0.0, 0.5, 1.0).into());
+    f.write_pixel(0, 1, (0., 0.5, 1.).into());
     let v = f.to_rgb8();
 
     assert_eq!(v.len(), f.width * f.height * 3);
