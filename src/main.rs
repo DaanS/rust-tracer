@@ -16,8 +16,6 @@ mod sphere;
 mod util;
 
 /// le current todos
-/// - give objects materials
-/// - capture materials in hitrecords
 /// - implement scattering
 
 use std::fmt::Write;

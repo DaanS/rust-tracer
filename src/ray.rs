@@ -16,6 +16,12 @@ macro_rules! ray {
     };
 }
 
+impl Ray {
+    pub fn default() -> Ray {
+        ray!((0, 0, 0) -> (0, 0, 0))
+    }
+}
+
 #[test]
 fn test_creation() {
     let r1 = Ray { origin: vec3!(1, 0, 0), direction: vec3!(0, 1, 0) };

@@ -1,7 +1,17 @@
-use crate::{film::Film, scene::Scene, camera::Camera, sampler::Sampler, config::{Color, Float}, ray::Ray, color::color_rgb, hit::Hit};
+use crate::{
+    camera::Camera,
+    color::color_rgb,
+    config::{Color, Float},
+    film::Film,
+    hit::Hit,
+    material::Scatter,
+    ray::Ray,
+    sampler::Sampler,
+    scene::Scene,
+};
 
 /// integrator concepts
-/// 
+///
 /// for pixel based approaches:
 /// - dispatch parts of image (e.g. tiles) -> Film
 /// - generate samples for pixels -> Sampler
@@ -12,18 +22,19 @@ use crate::{film::Film, scene::Scene, camera::Camera, sampler::Sampler, config::
 pub struct Integrator<'a> {
     scene: &'a Scene,
     cam: &'a Camera,
-    sampler: &'a dyn Sampler
+    sampler: &'a dyn Sampler,
 }
 
 impl<'a> Integrator<'a> {
     pub fn new(scene: &'a Scene, cam: &'a Camera, sampler: &'a dyn Sampler) -> Integrator<'a> {
-        Integrator { scene, cam, sampler }
+        Integrator { scene, cam, sampler, }
     }
 
     fn li(&self, r: Ray) -> Color {
         match self.scene.objects[0].hit(r.clone(), 0., Float::INFINITY) {
-            Some(hit_record) => {
-                (1., 0., 0.).into()
+            Some(hit_record) => match hit_record.material.scatter(r.clone(), hit_record.clone()) {
+                Some(scatter_record) => scatter_record.attenuation,
+                None => color_rgb(0., 0., 0.)
             },
             None => {
                 let normalized_direction = r.direction.normalize();
@@ -40,7 +51,7 @@ impl<'a> Integrator<'a> {
                 let r = self.cam.get_ray(s, t);
                 let col = self.li(r);
                 film.write_pixel(x, y, col);
-            } 
+            }
         }
     }
 }

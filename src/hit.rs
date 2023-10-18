@@ -1,8 +1,11 @@
 use crate::config::Float;
+use crate::material::Material;
 use crate::ray::Ray;
 
+#[derive(Clone)]
 pub struct HitRecord {
-    pub t: Float
+    pub t: Float,
+    pub material: Material,
 }
 
 pub trait Hit {
