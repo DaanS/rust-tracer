@@ -1,4 +1,4 @@
-use crate::{config::{Color, Float}, ray::Ray, hit::HitRecord};
+use crate::{config::{Color, Float}, ray::{ray, Ray}, hit::HitRecord, vec3::Vec3};
 
 pub struct ScatterRecord {
     pub attenuation: Color,
@@ -23,7 +23,7 @@ impl Scatter for Material {
     fn scatter(&self, ray_in: Ray, hit: HitRecord) -> Option<ScatterRecord> {
         match self {
             Material::Lambertian{color} => { 
-                Some(ScatterRecord { attenuation: color.clone(), out: Ray::default() }) 
+                Some(ScatterRecord { attenuation: color.clone(), out: ray(hit.pos, hit.normal + Vec3::random_unit_vector()) }) 
             },
             Material::Metal{color, roughness} => {
                 None

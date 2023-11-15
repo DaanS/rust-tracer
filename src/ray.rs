@@ -1,4 +1,4 @@
-use crate::vec3::{Point, Vec3};
+use crate::{vec3::{Point, Vec3}, config::Float};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ray {
@@ -20,6 +20,10 @@ impl Ray {
     pub fn default() -> Ray {
         ray!((0, 0, 0) -> (0, 0, 0))
     }
+
+    pub fn at(&self, t: Float) -> Point {
+        self.origin + t * self.direction
+    }
 }
 
 #[test]
@@ -27,4 +31,11 @@ fn test_creation() {
     let r1 = Ray { origin: vec3!(1, 0, 0), direction: vec3!(0, 1, 0) };
     let r2 = ray!((1, 0, 0) -> (0, 1, 0));
     assert_eq!(r1, r2);
+}
+
+#[test]
+fn test_at() {
+    let r = ray!((1, 0, 0) -> (0, 1, 0));
+    assert_eq!(r.at(1.), vec3!(1, 1, 0));
+    assert_eq!(r.at(-2.), vec3!(1, -2, 0));
 }

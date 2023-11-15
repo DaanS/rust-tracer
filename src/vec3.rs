@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use crate::config::Float;
+use crate::random::random_in_range;
 
 pub type Point = Vec3;
 
@@ -33,6 +34,14 @@ impl Vec3 {
 
     pub fn normalize(self) -> Vec3 {
         self / self.length()
+    }
+
+    pub fn random_unit_vector() -> Vec3 {
+        let mut candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0));
+        while candidate.length_squared() > 1.0 {
+            candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0));
+        }
+        candidate.normalize()
     }
 }
 
@@ -84,25 +93,35 @@ fn test_basics() {
     assert_eq!(v1 * 2., 2. * v1);
 }
 
-#[test]
-fn test_dot() {
+#[cfg(test)]
+mod tests {
     use approx::assert_ulps_eq;
-    use crate::config::PI;
+    use crate::{config::{PI, Float}, vec3::{dot, Vec3}};
 
-    let v_x = vec3!(1, 0, 0);
-    let v_y = vec3!(0, 1, 0);
-    assert_eq!(dot(v_x, v_x), 1.);
-    assert_eq!(dot(v_x, v_y), 0.);
-    assert_eq!(dot(v_x, -v_x), -1.);
-    let v_half = (v_x + v_y).normalize();
-    assert_ulps_eq!(dot(v_x, v_half), (PI / 4.).cos());
-}
+    #[test]
+    fn test_dot() {
 
-#[test]
-fn test_length() {
-    let v = vec3!(2, 0, 0);
-    assert_eq!(v.length(), 2.);
-    assert_eq!(v.length_squared(), 4.);
-    assert_eq!(vec3!(1, 1, 0).length(), Float::sqrt(2.));
-    assert_eq!((vec3!(5, 3, 9)).normalize().length(), 1.);
+        let v_x = vec3!(1, 0, 0);
+        let v_y = vec3!(0, 1, 0);
+        assert_eq!(dot(v_x, v_x), 1.);
+        assert_eq!(dot(v_x, v_y), 0.);
+        assert_eq!(dot(v_x, -v_x), -1.);
+        let v_half = (v_x + v_y).normalize();
+        assert_ulps_eq!(dot(v_x, v_half), (PI / 4.).cos());
+    }
+
+    #[test]
+    fn test_length() {
+        let v = vec3!(2, 0, 0);
+        assert_eq!(v.length(), 2.);
+        assert_eq!(v.length_squared(), 4.);
+        assert_eq!(vec3!(1, 1, 0).length(), Float::sqrt(2.));
+        assert_eq!((vec3!(5, 3, 9)).normalize().length(), 1.);
+    }
+
+    #[test]
+    fn test_random() {
+        let v = Vec3::random_unit_vector();
+        assert_ulps_eq!(v.length(), 1.);
+    }
 }

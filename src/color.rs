@@ -1,4 +1,4 @@
-use std::ops::{Mul, Add};
+use std::ops::{Mul, Add, Div, AddAssign};
 
 use approx::{UlpsEq, AbsDiffEq};
 
@@ -31,12 +31,24 @@ impl Add<ColorRgb> for ColorRgb { type Output = Self;
     fn add(self, c: ColorRgb) -> Self { color_rgb(self.r + c.r, self.g + c.g, self.b + c.b) }
 }
 
+impl AddAssign<ColorRgb> for ColorRgb {
+    fn add_assign(&mut self, rhs: ColorRgb) {
+        self.r += rhs.r;
+        self.g += rhs.g;
+        self.b += rhs.b;
+    }
+}
+
 impl Mul<ColorRgb> for ColorRgb { type Output = Self;
     fn mul(self, c: ColorRgb) -> Self { color_rgb(self.r * c.r, self.g * c.g, self.b * c.b) }
 }
 
 impl Mul<Float> for ColorRgb { type Output = Self;
     fn mul(self, f: Float) -> Self { color_rgb(self.r * f, self.g * f, self.b * f) }
+}
+
+impl Div<Float> for ColorRgb { type Output = Self;
+    fn div(self, f: Float) -> Self { color_rgb(self.r / f, self.g / f, self.b / f) }
 }
 
 impl Mul<ColorRgb> for Float { type Output = ColorRgb;
