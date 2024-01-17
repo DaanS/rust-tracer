@@ -11,8 +11,8 @@ pub struct Sphere {
     pub material: Material,
 }
 
-pub fn sphere(center: Point, radius: Float, material: Material) -> Sphere { 
-    Sphere { center, radius, material } 
+pub fn sphere(center: (Float, Float, Float), radius: Float, material: Material) -> Sphere { 
+    Sphere { center: center.into(), radius, material } 
 }
 
 impl Hit for Sphere {
@@ -60,7 +60,7 @@ impl Hit for Vec<Sphere> {
 
 #[test]
 fn test_hit_sphere() {
-    let s = sphere((0., 0., 0.).into(), 1., Material::None);
+    let s = sphere((0., 0., 0.), 1., Material::None);
 
     assert!(s.hit(ray!((-10, 0, 0) -> (1., 0., 0.)), 0., f64::INFINITY).is_some());
 
@@ -75,8 +75,8 @@ fn test_hit_sphere() {
 
 #[test]
 fn test_hit_vec() {
-    let s1 = sphere((1., 0., 0.).into(), 1., Material::None);
-    let s2 = sphere((-1., 0., 0.).into(), 1., Material::None);
+    let s1 = sphere((1., 0., 0.), 1., Material::None);
+    let s2 = sphere((-1., 0., 0.), 1., Material::None);
     let v = vec![s1, s2];
 
     assert_eq!(v.hit(ray!((3, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().t, 1.);

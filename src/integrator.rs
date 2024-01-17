@@ -1,5 +1,6 @@
+use std::io::{stdout, Write};
+
 use crate::{
-    camera::Camera,
     color::color_rgb,
     config::{Color, Float},
     film::Film,
@@ -9,6 +10,20 @@ use crate::{
     sampler::Sampler,
     scene::Scene,
 };
+
+fn print_progress(prog: Float) {
+    const WIDTH: usize = 70;
+
+    let pos = (prog * WIDTH as Float) as usize;
+
+    let mut lock = stdout().lock();
+    write!(lock, "[").unwrap();
+    for _i in 0..pos { write!(lock, "=").unwrap(); }
+    write!(lock, ">").unwrap();
+    for _i in (pos + 1)..WIDTH { write!(lock, " ").unwrap(); }
+    write!(lock, "] {}%\r", (prog * 100.) as usize).unwrap();
+    stdout().flush().unwrap();
+}
 
 /// integrator concepts
 ///
@@ -22,13 +37,12 @@ use crate::{
 // TODO we can probably get rid of the dyn for Sampler and turn it into a compile time configuration option
 pub struct Integrator<'a> {
     scene: &'a Scene,
-    cam: &'a Camera,
     sampler: &'a dyn Sampler,
 }
 
 impl<'a> Integrator<'a> {
-    pub fn new(scene: &'a Scene, cam: &'a Camera, sampler: &'a dyn Sampler) -> Integrator<'a> {
-        Integrator { scene, cam, sampler, }
+    pub fn new(scene: &'a Scene, sampler: &'a dyn Sampler) -> Integrator<'a> {
+        Integrator { scene, sampler, }
     }
 
     // TODO we could probably carry depth and attenuation info in the ray itself
@@ -51,12 +65,13 @@ impl<'a> Integrator<'a> {
         for x in 0..film.width {
             for y in 0..film.height {
                 let mut col = color_rgb(0., 0., 0.);
-                for n in 0..film.samples {
+                for _n in 0..film.samples {
                     let (s, t) = self.sampler.get_pixel_sample(x, y);
-                    let r = self.cam.get_ray(s, t);
-                    col = col + self.li(r, 64);
+                    let r = self.scene.cam.get_ray(s, t);
+                    col = col + self.li(r, 8);
                 }
                 film.add_sample(x, y, col);
+                print_progress((x * film.height + y) as Float / (film.width * film.height) as Float);
             }
         }
     }

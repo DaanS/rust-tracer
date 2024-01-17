@@ -1,8 +1,8 @@
-use std::ops::{Mul, Add, Div, AddAssign};
+use std::ops::{Mul, Add, Div, AddAssign, Sub};
 
 use approx::{UlpsEq, AbsDiffEq};
 
-use crate::config::Float;
+use crate::{config::Float, random::random_in_range};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ColorRgb {
@@ -19,11 +19,21 @@ impl ColorRgb {
     pub fn to_rgb(self) -> Self {
         self
     }
+
+    pub fn random_in_range(min: Float, max: Float) -> Self {
+        color_rgb(random_in_range(min, max), random_in_range(min, max), random_in_range(min, max))
+    }
 }
 
 impl From<(Float, Float, Float)> for ColorRgb {
     fn from(t: (Float, Float, Float)) -> Self {
         ColorRgb{r: t.0, g: t.1, b: t.2}
+    }
+}
+
+impl From<ColorRgb> for (Float, Float, Float) {
+    fn from(t: ColorRgb) -> Self {
+        (t.r, t.g, t.b)
     }
 }
 
@@ -37,6 +47,10 @@ impl AddAssign<ColorRgb> for ColorRgb {
         self.g += rhs.g;
         self.b += rhs.b;
     }
+}
+
+impl Sub<ColorRgb> for ColorRgb { type Output = Self;
+    fn sub(self, c: ColorRgb) -> Self { color_rgb(self.r - c.r, self.g - c.g, self.b - c.b) }
 }
 
 impl Mul<ColorRgb> for ColorRgb { type Output = Self;

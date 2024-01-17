@@ -10,6 +10,7 @@ pub fn ray(origin: Point, direction: Vec3) -> Ray {
     Ray { origin, direction }
 }
 
+#[cfg(test)]
 macro_rules! ray {
     (($ox:expr, $oy:expr, $oz:expr) -> ($dx:expr, $dy:expr, $dz:expr)) => {
         Ray{ origin: vec3!($ox, $oy, $oz), direction: vec3!($dx, $dy, $dz) } 
@@ -17,10 +18,6 @@ macro_rules! ray {
 }
 
 impl Ray {
-    pub fn default() -> Ray {
-        ray!((0, 0, 0) -> (0, 0, 0))
-    }
-
     pub fn at(&self, t: Float) -> Point {
         self.origin + t * self.direction
     }

@@ -1,10 +1,14 @@
-use crate::config::Float;
+use crate::config::{Float, PI};
 
 pub fn clamp(x: Float, min: Float, max: Float) -> Float {
     assert!(min <= max);
     if x < min { min }
     else if x > max { max }
     else { x }
+}
+
+pub fn radians(degrees: Float) -> Float {
+    degrees * PI / 180.
 }
 
 #[test]

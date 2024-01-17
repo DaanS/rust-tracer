@@ -8,6 +8,7 @@ default-run = "main"
 
 [dependencies]
 approx = "0.5.1"
+image = "0.24.7"
 rand = "0.8.5"
 rand_xoshiro = "0.6.0"
 
@@ -18,3 +19,8 @@ path = "src/main.rs"
 [[bin]]
 name = "experiment"
 path = "src/experiment.rs"
+
+[profile.rel-deb]
+inherits = "release"
+debug = true
+split-debuginfo = "packed"

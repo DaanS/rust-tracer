@@ -1,3 +1,4 @@
+use crate::color::{color_rgb, self};
 use crate::config::{Color, Float};
 
 use crate::util::clamp;
@@ -23,10 +24,6 @@ impl Film {
         Film{width, height, samples, pix: vec![Color::default(); width * height]}
     }
 
-    pub fn write_pixel(&mut self, x: usize, y: usize, col: Color) {
-        self.pix[x + y * self.width] = col;
-    }
-
     pub fn add_sample(&mut self, x: usize, y: usize, col: Color) {
         self.pix[x + y * self.width] += col;
     }
@@ -43,10 +40,52 @@ impl Film {
     }
 }
 
+#[derive(Clone)]
+pub struct SampleCollector {
+    pub mean: Color,
+    pub sum_squared_diffs: Color,
+    pub n: usize
+}
+
+impl SampleCollector {
+    pub fn new() -> Self {
+        SampleCollector { mean: color_rgb(0., 0., 0.), sum_squared_diffs: color_rgb(0., 0., 0.), n: 0 }
+    }
+
+    pub fn add_sample(&mut self, x: Color) {
+        self.n += 1;
+        let delta_n_min_1 = x - self.mean;
+        self.mean += delta_n_min_1 / self.n as Float;
+        let delta_n = x - self.mean;
+        self.sum_squared_diffs += delta_n * delta_n_min_1;
+    }
+
+    // TODO probably turn this back into a float
+    pub fn variance(&self) -> Color {
+        if self.n > 1 {
+            self.sum_squared_diffs / (self.n - 1) as Float
+        } else {
+            color_rgb(0., 0., 0.)
+        }
+    }
+}
+
+pub struct SamplingFilm {
+    pub width: usize,
+    pub height: usize,
+    pub pix: Vec<SampleCollector>
+}
+
+impl SamplingFilm {
+    pub fn new(width: usize, height: usize) -> Self {
+        SamplingFilm { width, height, pix: vec![SampleCollector::new(); width * height] }
+    }
+}
+
 #[test]
 fn test() {
     let mut f = Film::new(2, 3, 1);
-    f.write_pixel(0, 1, (0., 0.5, 1.).into());
+    f.add_sample(0, 1, (0., 0.5, 1.).into());
     let v = f.to_rgb8();
 
     assert_eq!(v.len(), f.width * f.height * 3);
@@ -54,7 +93,7 @@ fn test() {
         for y in 0..f.height {
             for c in 0..3 {
                 assert_eq!(v[(x + y * f.width) * 3 + c], 
-                    if x == 0 && y == 1 && c == 1 { 127 }
+                    if x == 0 && y == 1 && c == 1 { map_color_component(0.5) }
                     else if x == 0 && y == 1 && c == 2 { 255 }
                     else { 0 }
                 );

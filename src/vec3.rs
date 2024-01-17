@@ -13,7 +13,7 @@ pub struct Vec3 {
     pub z: Float,
 }
 
-fn vec3(x: Float, y: Float, z: Float) -> Vec3 {
+pub fn vec3(x: Float, y: Float, z: Float) -> Vec3 {
     Vec3 { x, y, z }
 }
 
@@ -27,6 +27,12 @@ pub fn dot(u: Vec3, v: Vec3) -> Float {
     u.x * v.x + u.y * v.y + u.z * v.z
 }
 
+pub fn cross(u: Vec3, v: Vec3) -> Vec3 {
+    vec3(u.y * v.z - u.z * v.y,
+         u.z * v.x - u.x * v.z,
+         u.x * v.y - u.y * v.x)
+}
+
 impl Vec3 {
     pub fn length_squared(self) -> Float { self.x * self.x + self.y * self.y + self.z * self.z }
 
@@ -36,18 +42,36 @@ impl Vec3 {
         self / self.length()
     }
 
-    pub fn random_unit_vector() -> Vec3 {
-        let mut candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0));
-        while candidate.length_squared() > 1.0 {
-            candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0));
-        }
-        candidate.normalize()
+    pub fn near_zero(self) -> bool {
+        self.x.abs() < Float::EPSILON && self.y.abs() < Float::EPSILON && self.z.abs() < Float::EPSILON
     }
+}
+
+pub fn random_unit_vector() -> Vec3 {
+    let mut candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0));
+    while candidate.length_squared() > 1.0 {
+        candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0));
+    }
+    candidate.normalize()
+}
+
+pub fn random_vector_in_unit_disk() -> Vec3 {
+    let mut candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), 0.);
+    while candidate.length_squared() > 1.0 {
+        candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), 0.);
+    }
+    candidate
 }
 
 impl From<(Float, Float, Float)> for Vec3 {
     fn from(t: (Float, Float, Float)) -> Self {
         Vec3 { x: t.0, y: t.1, z: t.2, }
+    }
+}
+
+impl From<Vec3> for (Float, Float, Float) {
+    fn from(v: Vec3) -> Self {
+        (v.x, v.y, v.z)
     }
 }
 
@@ -96,7 +120,7 @@ fn test_basics() {
 #[cfg(test)]
 mod tests {
     use approx::assert_ulps_eq;
-    use crate::{config::{PI, Float}, vec3::{dot, Vec3}};
+    use crate::{config::{PI, Float}, vec3::{dot, random_unit_vector}};
 
     #[test]
     fn test_dot() {
@@ -121,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_random() {
-        let v = Vec3::random_unit_vector();
+        let v = random_unit_vector();
         assert_ulps_eq!(v.length(), 1.);
     }
 }
