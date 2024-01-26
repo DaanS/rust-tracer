@@ -16,9 +16,9 @@ rand_xoshiro = "0.6.0"
 name = "main"
 path = "src/main.rs"
 
-[[bin]]
-name = "experiment"
-path = "src/experiment.rs"
+#[[bin]]
+#name = "experiment"
+#path = "src/experiment.rs"
 
 [profile.rel-deb]
 inherits = "release"

@@ -1,4 +1,4 @@
-use crate::{config::{Color, Float}, ray::{ray, Ray}, hit::{HitRecord, Hit}, vec3::{Vec3, dot, random_unit_vector}, random::random_float, sphere::sphere};
+use crate::{config::{Color, Float}, ray::{ray, Ray}, hit::HitRecord, vec3::{Vec3, dot, random_unit_vector}, random::random_float};
 
 pub struct ScatterRecord {
     pub attenuation: Color,
@@ -69,48 +69,51 @@ impl Scatter for Material {
     }
 }
 
-#[test]
-fn test_scatter_anti_normal() {
-    use crate::color::color_rgb;
+#[cfg(test)]
+mod tests {
+    use crate::{color::color_rgb, ray::Ray, sphere::sphere, material::{Material, metal, dielectric, Scatter}, vec3::dot, hit::Hit};
 
-    let color = color_rgb(0.8, 0.6, 0.4);
-    let mut s = sphere((0., 0., 0.), 0.5, Material::Lambertian { color });
-    let r = ray!((-1, 0, 0) -> (1, 0, 0));
-    let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
+    #[test]
+    fn test_scatter_anti_normal() {
+        let color = color_rgb(0.8, 0.6, 0.4);
+        let mut s = sphere((0., 0., 0.), 0.5, Material::Lambertian { color });
+        let r = ray!((-1, 0, 0) -> (1, 0, 0));
+        let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
 
-    let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
-    assert_eq!(scatter_rec.attenuation, (0.8, 0.6, 0.4).into());
-    assert!(dot(h.normal, scatter_rec.out.direction) > 0.);
-    assert_eq!(scatter_rec.out.origin, h.pos);
+        let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
+        assert_eq!(scatter_rec.attenuation, (0.8, 0.6, 0.4).into());
+        assert!(dot(h.normal, scatter_rec.out.direction) > 0.);
+        assert_eq!(scatter_rec.out.origin, h.pos);
 
-    s.material = metal((0.8, 0.6, 0.4), 0.);
-    let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
-    assert_eq!(scatter_rec.attenuation, (0.8, 0.6, 0.4).into());
-    assert_eq!(scatter_rec.out.direction, -r.direction);
-    assert_eq!(scatter_rec.out.origin, h.pos);
+        s.material = metal((0.8, 0.6, 0.4), 0.);
+        let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
+        assert_eq!(scatter_rec.attenuation, (0.8, 0.6, 0.4).into());
+        assert_eq!(scatter_rec.out.direction, -r.direction);
+        assert_eq!(scatter_rec.out.origin, h.pos);
 
-    s.material = dielectric(1.);
-    let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
-    assert_eq!(scatter_rec.attenuation, (1., 1., 1.).into());
-    assert_eq!(scatter_rec.out.direction, r.direction);
-    assert_eq!(scatter_rec.out.origin, h.pos);
-}
+        s.material = dielectric(1.);
+        let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
+        assert_eq!(scatter_rec.attenuation, (1., 1., 1.).into());
+        assert_eq!(scatter_rec.out.direction, r.direction);
+        assert_eq!(scatter_rec.out.origin, h.pos);
+    }
 
-#[test]
-fn test_refraction() {
-    let s = sphere((0., 0., 0.), 0.5, dielectric(1.3));
+    #[test]
+    fn test_refraction() {
+        let s = sphere((0., 0., 0.), 0.5, dielectric(1.3));
 
-    let r = ray!((-1, 0, 0) -> (1, 0, 0));
-    let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
-    let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
-    assert_eq!(scatter_rec.out.direction, r.direction);
-    assert_eq!(scatter_rec.out.origin, h.pos);
+        let r = ray!((-1, 0, 0) -> (1, 0, 0));
+        let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
+        let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
+        assert_eq!(scatter_rec.out.direction, r.direction);
+        assert_eq!(scatter_rec.out.origin, h.pos);
 
-    let r = ray!((-1.5, -1, 0) -> (1, 1, 0));
-    let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
-    let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
-    assert!(dot(r.direction, scatter_rec.out.direction) > 0.);
-    assert!(dot(h.normal, scatter_rec.out.direction) < 0.);
-    assert!(dot(r.direction.normalize(), -h.normal) < dot(scatter_rec.out.direction, -h.normal));
-    assert_eq!(scatter_rec.out.origin, h.pos);
+        let r = ray!((-1.5, -1, 0) -> (1, 1, 0));
+        let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
+        let scatter_rec = s.material.scatter(r.clone(), h.clone()).unwrap();
+        assert!(dot(r.direction, scatter_rec.out.direction) > 0.);
+        assert!(dot(h.normal, scatter_rec.out.direction) < 0.);
+        assert!(dot(r.direction.normalize(), -h.normal) < dot(scatter_rec.out.direction, -h.normal));
+        assert_eq!(scatter_rec.out.origin, h.pos);
+    }
 }

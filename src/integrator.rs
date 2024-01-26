@@ -2,13 +2,13 @@ use std::io::{stdout, Write};
 
 use crate::{
     color::color_rgb,
-    config::{Color, Float},
-    film::Film,
+    config::{Color, Film, Float},
+    film::{PresampledFilm},
     hit::Hit,
     material::Scatter,
     ray::Ray,
-    sampler::Sampler,
     scene::Scene,
+    Sampler,
 };
 
 fn print_progress(prog: Float) {
@@ -34,14 +34,13 @@ fn print_progress(prog: Float) {
 /// - calculate radiance contribution for rays
 ///
 
-// TODO we can probably get rid of the dyn for Sampler and turn it into a compile time configuration option
 pub struct Integrator<'a> {
     scene: &'a Scene,
-    sampler: &'a dyn Sampler,
+    sampler: Sampler,
 }
 
 impl<'a> Integrator<'a> {
-    pub fn new(scene: &'a Scene, sampler: &'a dyn Sampler) -> Integrator<'a> {
+    pub fn new(scene: &'a Scene, sampler: Sampler) -> Integrator<'a> {
         Integrator { scene, sampler, }
     }
 
@@ -61,16 +60,15 @@ impl<'a> Integrator<'a> {
         }
     }
 
-    pub fn dispatch(&self, film: &mut Film) {
+    // TODO passing desired sample count here is a temporary measure until we get variable sampling rates working
+    pub fn dispatch(&self, film: &mut Film, samples: usize) {
         for x in 0..film.width {
             for y in 0..film.height {
-                let mut col = color_rgb(0., 0., 0.);
-                for _n in 0..film.samples {
+                for _n in 0..samples {
                     let (s, t) = self.sampler.get_pixel_sample(x, y);
                     let r = self.scene.cam.get_ray(s, t);
-                    col = col + self.li(r, 8);
+                    film.add_sample(x, y, self.li(r, 8));
                 }
-                film.add_sample(x, y, col);
                 print_progress((x * film.height + y) as Float / (film.width * film.height) as Float);
             }
         }

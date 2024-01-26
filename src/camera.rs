@@ -1,4 +1,4 @@
-use crate::{ray::Ray, ray::ray, config::Float, film::Film, vec3::{Vec3, cross, random_vector_in_unit_disk}, util::radians};
+use crate::{ray::Ray, ray::ray, config::{Film, Float}, vec3::{Vec3, cross, random_vector_in_unit_disk}, util::radians};
 
 pub struct Camera {
     cam_pos: Vec3,
