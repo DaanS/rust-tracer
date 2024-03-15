@@ -1,14 +1,7 @@
 use std::io::{stdout, Write};
 
 use crate::{
-    color::color_rgb,
-    config::{Color, Film, Float},
-    film::{PresampledFilm},
-    hit::Hit,
-    material::Scatter,
-    ray::Ray,
-    scene::Scene,
-    Sampler,
+    color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, hit::Hit, material::Scatter, png::Png, ray::Ray, scene::Scene, util::is_power_of_2, window::MinifbWindow, Sampler
 };
 
 fn print_progress(prog: Float) {
@@ -61,16 +54,38 @@ impl<'a> Integrator<'a> {
     }
 
     // TODO passing desired sample count here is a temporary measure until we get variable sampling rates working
-    pub fn dispatch(&self, film: &mut Film, samples: usize) {
-        for x in 0..film.width {
-            for y in 0..film.height {
-                for _n in 0..samples {
-                    let (s, t) = self.sampler.get_pixel_sample(x, y);
-                    let r = self.scene.cam.get_ray(s, t);
-                    film.add_sample(x, y, self.li(r, 8));
+    pub fn dispatch(&self, film: &mut Film, min_samples: usize, max_samples: usize) {
+        let mut win = MinifbWindow::new(film.width, film.height);
+        let mut win2 = MinifbWindow::new(film.width, film.height);
+        let mut win3 = MinifbWindow::new(film.width, film.height);
+
+        let mut sample_count = 0;
+
+        for n in 0..max_samples {
+            win.update(&film, SampleCollector::gamma_corrected_mean);
+            win2.update(&film, SampleCollector::variance);
+            win3.update(&film, SampleCollector::avg_variance);
+
+            for x in 0..film.width {
+                for y in 0..film.height {
+                    if n < min_samples || film.sample_collector(x, y).max_variance() > 0.004 {
+                        sample_count += 1;
+                        let (s, t) = self.sampler.get_pixel_sample(x, y);
+                        let r = self.scene.cam.get_ray(s, t);
+                        film.add_sample(x, y, self.li(r, 8));
+                    }
                 }
-                print_progress((x * film.height + y) as Float / (film.width * film.height) as Float);
+                print_progress((n * film.width * film.height + x * film.height) as Float / (film.width * film.height * max_samples) as Float);
+            }
+
+            if (n == 0) || is_power_of_2(n) {
+                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::gamma_corrected_mean), format!("out/mean-{n}.png").as_str());
+                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::variance), format!("out/variance-{n}.png").as_str());
+                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::avg_variance), format!("out/avg_variance-{n}.png").as_str());
             }
         }
+
+        println!("");
+        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
     }
 }

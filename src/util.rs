@@ -11,6 +11,10 @@ pub fn radians(degrees: Float) -> Float {
     degrees * PI / 180.
 }
 
+pub fn is_power_of_2(n: usize) -> bool {
+    (n > 0) && ((n & (n - 1)) == 0)
+}
+
 #[test]
 fn test_clamp() {
     assert_eq!(clamp(-1., 0., 1.), 0.);

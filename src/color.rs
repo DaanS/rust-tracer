@@ -23,6 +23,10 @@ impl ColorRgb {
     pub fn random_in_range(min: Float, max: Float) -> Self {
         color_rgb(random_in_range(min, max), random_in_range(min, max), random_in_range(min, max))
     }
+
+    pub fn grayscale(v: Float) -> Self {
+        color_rgb(v, v, v)
+    }
 }
 
 impl From<(Float, Float, Float)> for ColorRgb {

@@ -1,4 +1,4 @@
-use crate::{color::ColorRgb, film::{PresampledFilm, SamplingFilm}, sampler::SquareSampler};
+use crate::{color::ColorRgb, film::SamplingFilm, sampler::SquareSampler};
 
 pub type Float = f64;
 pub type Color = ColorRgb;

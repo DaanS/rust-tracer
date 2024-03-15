@@ -1,17 +1,7 @@
-use crate::color::{color_rgb};
+use crate::color::color_rgb;
 use crate::config::{Color, Float};
+use crate::conversion::{color_component_to_u8, color_gamma, map_color_component};
 
-use crate::util::clamp;
-
-// maybe move this elsewhere?
-pub fn map_color_component(comp: Float) -> u8 {
-    const GAMMA: Float = 2.;
-    (clamp(comp, 0., 1.).powf(1. / GAMMA) * 255 as Float) as u8
-}
-
-// TODO
-// later on we'll want to be able to terminate rendering for a pixel/tile based on error estimates
-// maybe it makes sense to store how many samples we've taken?
 pub struct PresampledFilm {
     pub width: usize,
     pub height: usize,
@@ -65,8 +55,27 @@ impl SampleCollector {
         if self.n > 1 {
             self.sum_squared_diffs / (self.n - 1) as Float
         } else {
-            color_rgb(0., 0., 0.)
+            (0., 0., 0.).into()
         }
+    }
+
+    pub fn mean(&self) -> Color {
+        self.mean
+    }
+
+    pub fn gamma_corrected_mean(&self) -> Color {
+        color_gamma(self.mean)
+    }
+
+    pub fn avg_variance(&self) -> Color {
+        let v = self.variance();
+        let l = (v.r + v.g + v.b) / 3.;
+        (l, l, l).into()
+    }
+
+    pub fn max_variance(&self) -> Float {
+        let v = self.variance();
+        v.r.max(v.g).max(v.b)
     }
 }
 
@@ -85,13 +94,17 @@ impl SamplingFilm {
         self.pix[x + y * self.width].add_sample(col);
     }
 
-    pub fn to_rgb8(&self) -> Vec<u8> {
+    pub fn sample_collector(&self, x: usize, y: usize) -> &SampleCollector {
+        &self.pix[x + y * self.width]
+    }
+
+    pub fn to_rgb8<ExtractFunc: Fn(&SampleCollector) -> Color>(&self, extract: ExtractFunc) -> Vec<u8> {
         let mut v = vec![0; self.width * self.height * 3];
         for (i, sc) in self.pix.iter().enumerate() {
-            let c = sc.mean.to_rgb();
-            v[i * 3] = map_color_component(c.r);
-            v[i * 3 + 1] = map_color_component(c.g);
-            v[i * 3 + 2] = map_color_component(c.b);
+            let c = extract(sc);
+            v[i * 3] = color_component_to_u8(c.r);
+            v[i * 3 + 1] = color_component_to_u8(c.g);
+            v[i * 3 + 2] = color_component_to_u8(c.b);
         }
         v
     }
@@ -121,7 +134,7 @@ fn test_presampled() {
 fn test_sampling() {
     let mut f = SamplingFilm::new(2, 3);
     f.add_sample(0, 1, (0., 0.5, 1.).into());
-    let v = f.to_rgb8();
+    let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
 
     assert_eq!(v.len(), f.width * f.height * 3);
     for x in 0..f.width {
@@ -137,7 +150,7 @@ fn test_sampling() {
     }
 
     f.add_sample(0, 1, (0., 0.5, 1.).into());
-    let v = f.to_rgb8();
+    let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
 
     assert_eq!(v.len(), f.width * f.height * 3);
     for x in 0..f.width {
@@ -155,7 +168,7 @@ fn test_sampling() {
     let mut f = SamplingFilm::new(1, 1);
     f.add_sample(0, 0, (1., 0.5, 0.).into());
     f.add_sample(0, 0, (0., 0.5, 1.).into());
-    let v = f.to_rgb8();
+    let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
     assert_eq!(v.len(), 3);
     for c in 0..3 { 
         assert_eq!(v[c], map_color_component(0.5));
