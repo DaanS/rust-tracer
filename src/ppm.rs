@@ -14,6 +14,7 @@ impl Ppm {
     pub fn write_impl(&self, path_str: &str) {
         let mut buf = String::new();
         write!(buf, "{}", self).unwrap();
+
         let path = Path::new(path_str);
         if let Some(parent) = path.parent() { 
             std::fs::create_dir_all(parent).unwrap();

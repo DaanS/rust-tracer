@@ -50,6 +50,14 @@ impl SampleCollector {
         self.sum_squared_diffs += delta_n * delta_n_min_1;
     }
 
+    pub fn mean(&self) -> Color {
+        self.mean
+    }
+
+    pub fn gamma_corrected_mean(&self) -> Color {
+        color_gamma(self.mean)
+    }
+
     // TODO probably turn this back into a float
     pub fn variance(&self) -> Color {
         if self.n > 1 {
@@ -57,14 +65,6 @@ impl SampleCollector {
         } else {
             (0., 0., 0.).into()
         }
-    }
-
-    pub fn mean(&self) -> Color {
-        self.mean
-    }
-
-    pub fn gamma_corrected_mean(&self) -> Color {
-        color_gamma(self.mean)
     }
 
     pub fn avg_variance(&self) -> Color {
