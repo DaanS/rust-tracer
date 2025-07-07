@@ -71,7 +71,7 @@ impl Scatter for Material {
 
 #[cfg(test)]
 mod tests {
-    use crate::{color::color_rgb, ray::Ray, sphere::sphere, material::{Material, metal, dielectric, Scatter}, vec3::dot, hit::Hit};
+    use crate::{color::color_rgb, ray::Ray, hit::sphere::sphere, material::{Material, metal, dielectric, Scatter}, vec3::dot, hit::Hit};
 
     #[test]
     fn test_scatter_anti_normal() {

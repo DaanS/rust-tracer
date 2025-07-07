@@ -1,7 +1,7 @@
-use std::io::{stdout, Write};
+use std::{io::{stdout, Write}};
 
 use crate::{
-    color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, hit::Hit, material::Scatter, png::Png, ray::Ray, scene::Scene, util::is_power_of_2, window::MinifbWindow, Sampler
+    color::color_rgb, config::{Color, Film, Float}, film::SampleCollector, hit::Hit, material::Scatter, png::Png, ray::Ray, scene::Scene, util::is_power_of_2, window::MinifbWindow, Sampler
 };
 
 fn print_progress(prog: Float) {
@@ -16,6 +16,19 @@ fn print_progress(prog: Float) {
     for _i in (pos + 1)..WIDTH { write!(lock, " ").unwrap(); }
     write!(lock, "] {}%\r", (prog * 100.) as usize).unwrap();
     stdout().flush().unwrap();
+}
+
+struct RenderRegionJob<'a> {
+    x: usize,
+    y: usize,
+    width: usize,
+    height: usize,
+    min_samples: usize,
+    max_samples: usize,
+    variance_target: Float,
+    scene: &'a Scene,
+    sampler: Sampler,
+    film: Film
 }
 
 /// integrator concepts
@@ -53,11 +66,11 @@ impl<'a> Integrator<'a> {
         }
     }
 
-    // TODO passing desired sample count here is a temporary measure until we get variable sampling rates working
-    pub fn dispatch(&self, film: &mut Film, min_samples: usize, max_samples: usize) {
+    pub fn dispatch(&self, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
         let mut win = MinifbWindow::new(film.width, film.height);
         let mut win2 = MinifbWindow::new(film.width, film.height);
         let mut win3 = MinifbWindow::new(film.width, film.height);
+        let mut win4 = MinifbWindow::new(film.width, film.height);
 
         let mut sample_count = 0;
 
@@ -65,10 +78,14 @@ impl<'a> Integrator<'a> {
             win.update(&film, SampleCollector::gamma_corrected_mean);
             win2.update(&film, SampleCollector::variance);
             win3.update(&film, SampleCollector::avg_variance);
+            win4.update(&film, |sc| {
+                let max_var = sc.max_variance();
+                (max_var, max_var, max_var).into()
+            });
 
             for x in 0..film.width {
                 for y in 0..film.height {
-                    if n < min_samples || film.sample_collector(x, y).max_variance() > 0.004 {
+                    if n < min_samples || film.sample_collector(x, y).max_variance() > variance_target {
                         sample_count += 1;
                         let (s, t) = self.sampler.get_pixel_sample(x, y);
                         let r = self.scene.cam.get_ray(s, t);

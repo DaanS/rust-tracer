@@ -1,4 +1,4 @@
-use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, material::{lambertian, metal, dielectric}, random::{random_float, random_in_range}, ray::Ray, sphere::{Sphere, sphere}, vec3::{vec3, Vec3}};
+use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, material::{lambertian, metal, dielectric}, random::{random_float, random_in_range}, ray::Ray, hit::sphere::{Sphere, sphere}, vec3::{vec3, Vec3}};
 
 pub struct Scene {
     pub objects: Vec<Sphere>,
