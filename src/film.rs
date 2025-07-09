@@ -1,4 +1,6 @@
-use crate::color::color_rgb;
+use approx::assert_ulps_eq;
+
+use crate::color::{color_rgb, ColorRgb};
 use crate::config::{Color, Float};
 use crate::conversion::{color_component_to_u8, color_gamma, map_color_component};
 
@@ -139,11 +141,74 @@ fn test_presampled() {
 }
 
 #[test]
+fn test_sample_collector() {
+    let c = color_rgb(0., 0.5, 1.0);
+    let mut s = SampleCollector::new();
+
+    s.add_sample(c);
+    assert_eq!(s.mean(), c);
+    assert_eq!(s.gamma_corrected_mean(), color_gamma(c));
+    assert_eq!(s.variance(), (0., 0., 0.).into());
+    assert_eq!(s.avg_variance(), (0., 0., 0.).into());
+    assert_eq!(s.max_variance(), 0.);
+
+    s.add_sample(c);
+    assert_eq!(s.mean(), c);
+    assert_eq!(s.gamma_corrected_mean(), color_gamma(c));
+    assert_eq!(s.variance(), (0., 0., 0.).into());
+    assert_eq!(s.avg_variance(), (0., 0., 0.).into());
+    assert_eq!(s.max_variance(), 0.);
+
+    let mut s2 = SampleCollector::new();
+    for i in 0..10 { s2.add_sample(c); }
+    assert_eq!(s2.mean(), c);
+    assert_eq!(s2.gamma_corrected_mean(), color_gamma(c));
+    assert_eq!(s2.variance(), (0., 0., 0.).into());
+    assert_eq!(s2.avg_variance(), (0., 0., 0.).into());
+    assert_eq!(s2.max_variance(), 0.);
+
+    let merged = s.merged_with(&s2);
+    assert_eq!(merged.mean(), c);
+    assert_eq!(merged.gamma_corrected_mean(), color_gamma(c));
+    assert_eq!(merged.variance(), (0., 0., 0.).into());
+    assert_eq!(merged.avg_variance(), (0., 0., 0.).into());
+    assert_eq!(merged.max_variance(), 0.);
+
+    let mut sa = SampleCollector::new();
+    let mut sb = SampleCollector::new();
+    let mut sm = SampleCollector::new();
+    sa.add_sample((0.5, 1.0, 0.0).into());
+    sa.add_sample((0.0, 0.5, 1.0).into());
+    sa.add_sample((1.0, 0.0, 0.5).into());
+
+    sb.add_sample((1.0, 0.0, 0.0).into());
+    sb.add_sample((0.0, 1.0, 0.0).into());
+    sb.add_sample((0.0, 0.0, 1.0).into());
+
+    sm.add_sample((0.5, 1.0, 0.0).into());
+    sm.add_sample((0.0, 0.5, 1.0).into());
+    sm.add_sample((1.0, 0.0, 0.5).into());
+    sm.add_sample((1.0, 0.0, 0.0).into());
+    sm.add_sample((0.0, 1.0, 0.0).into());
+    sm.add_sample((0.0, 0.0, 1.0).into());
+
+    let sm2 = sa.merged_with(&sb);
+    // TODO ulps
+    assert_ulps_eq!(sm.mean(), sm2.mean());
+    assert_ulps_eq!(sm.gamma_corrected_mean(), sm2.gamma_corrected_mean());
+    assert_ulps_eq!(sm.variance(), sm2.variance());
+    assert_ulps_eq!(sm.avg_variance(), sm2.avg_variance());
+    assert_ulps_eq!(sm.max_variance(), sm2.max_variance());
+}
+
+#[test]
 fn test_sampling() {
+    // add single sample to film and get gamma corrected rgb8
     let mut f = SamplingFilm::new(2, 3);
     f.add_sample(0, 1, (0., 0.5, 1.).into());
     let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
 
+    // check if sample was stored and mapped correctly
     assert_eq!(v.len(), f.width * f.height * 3);
     for x in 0..f.width {
         for y in 0..f.height {
@@ -157,9 +222,11 @@ fn test_sampling() {
         }
     }
 
+    // add a second sample
     f.add_sample(0, 1, (0., 0.5, 1.).into());
     let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
 
+    // check if output still matches
     assert_eq!(v.len(), f.width * f.height * 3);
     for x in 0..f.width {
         for y in 0..f.height {
@@ -173,6 +240,7 @@ fn test_sampling() {
         }
     }
 
+    // add two different samples and check if they average out correctly
     let mut f = SamplingFilm::new(1, 1);
     f.add_sample(0, 0, (1., 0.5, 0.).into());
     f.add_sample(0, 0, (0., 0.5, 1.).into());
