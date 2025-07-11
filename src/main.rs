@@ -11,7 +11,6 @@ mod material;
 mod ppm;
 mod png;
 mod scene;
-mod sphere;
 mod util;
 mod random;
 mod config;
@@ -38,15 +37,16 @@ fn variance_stats(film: &Film) {
 }
 
 fn main() {
-    const WIDTH: usize = 800;
-    const HEIGHT: usize = 450;
-    const SAMPLES: usize = 129;
+    const WIDTH: usize = 640;
+    const HEIGHT: usize = 360;
+    const SAMPLES: usize = 65;
     let mut film = Film::new(WIDTH, HEIGHT);
 
     let sampler = Sampler{};
     let scene = random_scene(&film);
     let integrator = Integrator::new(&scene, sampler);
-    integrator.dispatch(&mut film, 32, SAMPLES);
+    // TODO find out good bounds for samples and variance targets
+    integrator.dispatch(&mut film, 32, SAMPLES, 0.004);
 
     Ppm::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.ppm");
     Png::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.png");

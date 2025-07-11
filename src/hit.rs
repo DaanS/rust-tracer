@@ -3,6 +3,8 @@ use crate::material::Material;
 use crate::ray::Ray;
 use crate::vec3::{Vec3, Point};
 
+pub mod sphere;
+
 #[derive(Clone)]
 pub struct HitRecord {
     pub t: Float,
