@@ -46,7 +46,7 @@ fn main() {
     let scene = random_scene(&film);
     let integrator = Integrator::new(&scene, sampler);
     // TODO find out good bounds for samples and variance targets
-    integrator.dispatch(&mut film, 32, SAMPLES, 0.004);
+    integrator.dispatch_tiled(&mut film, 32, SAMPLES, 0.004, 4, 360);
 
     Ppm::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.ppm");
     Png::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.png");

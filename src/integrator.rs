@@ -66,11 +66,55 @@ impl<'a> Integrator<'a> {
         }
     }
 
+    pub fn dispatch_tile(&self, film: &mut Film, tile_x: usize, tile_y: usize, min_samples: usize, max_samples: usize, variance_target: Float) -> usize {
+        let mut sample_count = 0;
+        for y in 0..film.height {
+            for x in 0..film.width {
+                for n in 0..max_samples {
+                    if n >= min_samples && film.sample_collector(x, y).max_variance() <= variance_target { break; }
+
+                    sample_count += 1;
+                    let (s, t) = self.sampler.get_pixel_sample(x + tile_x * film.width, y + tile_y * film.height);
+                    let r = self.scene.cam.get_ray(s, t);
+                    film.add_sample(x, y, self.li(r, 8));
+                }
+            }
+        }
+        sample_count
+    }
+
+    pub fn dispatch_tiled(&self, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float, tile_width: usize, tile_height: usize) {
+        let mut win = MinifbWindow::new(film.width, film.height);
+        let mut win2 = MinifbWindow::new(film.width, film.height);
+        let mut win3 = MinifbWindow::new(film.width, film.height);
+
+        let tiles_hor = film.width / tile_width + 1.min(film.width % tile_width);
+        let tiles_ver = film.height / tile_height + 1.min(film.height % tile_height);
+
+        let mut sample_count = 0;
+
+        for x in 0..tiles_hor {
+            for y in 0..tiles_ver {
+                let mut tile_film = Film::new(tile_width, tile_height);
+                sample_count += self.dispatch_tile(&mut tile_film, x, y, min_samples, max_samples, variance_target);
+                film.overwrite_with(x * tile_width, y * tile_height, &tile_film);
+
+                win.update(&film, SampleCollector::gamma_corrected_mean);
+                win2.update(&film, SampleCollector::variance);
+                win3.update(&film, SampleCollector::avg_variance);
+
+                print_progress((y + x * tiles_ver) as Float / (tiles_hor * tiles_ver) as Float);
+            }
+        }
+
+        println!("");
+        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
+    }
+
     pub fn dispatch(&self, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
         let mut win = MinifbWindow::new(film.width, film.height);
         let mut win2 = MinifbWindow::new(film.width, film.height);
         let mut win3 = MinifbWindow::new(film.width, film.height);
-        let mut win4 = MinifbWindow::new(film.width, film.height);
 
         let mut sample_count = 0;
 
@@ -78,10 +122,6 @@ impl<'a> Integrator<'a> {
             win.update(&film, SampleCollector::gamma_corrected_mean);
             win2.update(&film, SampleCollector::variance);
             win3.update(&film, SampleCollector::avg_variance);
-            win4.update(&film, |sc| {
-                let max_var = sc.max_variance();
-                (max_var, max_var, max_var).into()
-            });
 
             for x in 0..film.width {
                 for y in 0..film.height {

@@ -32,7 +32,7 @@ impl PresampledFilm {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct SampleCollector {
     pub mean: Color,
     pub sum_squared_diffs: Color,
@@ -104,6 +104,14 @@ impl SamplingFilm {
         self.pix[x + y * self.width].add_sample(col);
     }
 
+    pub fn overwrite_with(&mut self, top_left_x: usize, top_left_y: usize, other: &Self) {
+        for x in top_left_x..(top_left_x + other.width).min(self.width) {
+            for y in top_left_y..(top_left_y + other.height).min(self.height) {
+                self.pix[x + y * self.width] = other.pix[x - top_left_x + (y - top_left_y) * other.width];
+            }
+        }
+    }
+
     pub fn sample_collector(&self, x: usize, y: usize) -> &SampleCollector {
         &self.pix[x + y * self.width]
     }
@@ -160,7 +168,7 @@ fn test_sample_collector() {
     assert_eq!(s.max_variance(), 0.);
 
     let mut s2 = SampleCollector::new();
-    for i in 0..10 { s2.add_sample(c); }
+    for _ in 0..10 { s2.add_sample(c); }
     assert_eq!(s2.mean(), c);
     assert_eq!(s2.gamma_corrected_mean(), color_gamma(c));
     assert_eq!(s2.variance(), (0., 0., 0.).into());
