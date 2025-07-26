@@ -40,33 +40,26 @@ struct RenderRegionJob<'a> {
 /// - calculate radiance contribution for rays
 ///
 
-pub struct Integrator<'a> {
-    scene: &'a Scene,
-    sampler: Sampler,
-}
+pub struct Integrator { }
 
-impl<'a> Integrator<'a> {
-    pub fn new(scene: &'a Scene, sampler: Sampler) -> Integrator<'a> {
-        Integrator { scene, sampler, }
-    }
-
+impl Integrator {
     // TODO we could probably carry depth and attenuation info in the ray itself
     // maybe we could use this to make li non-recursive?
     // but then how do we return the final result to the dispatcher?
     // and would a larger ray struct negatively impact hit detection performance?
-    fn li(&self, r: Ray, max_bounces: usize) -> Color {
+    fn li(scene: &Scene, r: Ray, max_bounces: usize) -> Color {
         if max_bounces == 0 { return color_rgb(0., 0., 0.); }
 
-        match self.scene.objects.hit(r.clone(), 0.001, Float::INFINITY) {
+        match scene.objects.hit(r.clone(), 0.001, Float::INFINITY) {
             Some(hit_record) => match hit_record.material.scatter(r.clone(), hit_record.clone()) {
-                Some(scatter_record) => scatter_record.attenuation * self.li(scatter_record.out, max_bounces - 1),
+                Some(scatter_record) => scatter_record.attenuation * Self::li(scene, scatter_record.out, max_bounces - 1),
                 None => color_rgb(0., 0., 0.)
             },
-            None => { (self.scene.background_color)(r) }
+            None => { (scene.background_color)(r) }
         }
     }
 
-    pub fn dispatch_tile(&self, film: &mut Film, tile_x: usize, tile_y: usize, min_samples: usize, max_samples: usize, variance_target: Float) -> usize {
+    pub fn dispatch_tile(scene: &Scene, sampler: Sampler, film: &mut Film, tile_x: usize, tile_y: usize, min_samples: usize, max_samples: usize, variance_target: Float) -> usize {
         let mut sample_count = 0;
         for y in 0..film.height {
             for x in 0..film.width {
@@ -74,16 +67,16 @@ impl<'a> Integrator<'a> {
                     if n >= min_samples && film.sample_collector(x, y).max_variance() <= variance_target { break; }
 
                     sample_count += 1;
-                    let (s, t) = self.sampler.get_pixel_sample(x + tile_x * film.width, y + tile_y * film.height);
-                    let r = self.scene.cam.get_ray(s, t);
-                    film.add_sample(x, y, self.li(r, 8));
+                    let (s, t) = sampler.get_pixel_sample(x + tile_x * film.width, y + tile_y * film.height);
+                    let r = scene.cam.get_ray(s, t);
+                    film.add_sample(x, y, Self::li(scene, r, 8));
                 }
             }
         }
         sample_count
     }
 
-    pub fn dispatch_tiled(&self, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float, tile_width: usize, tile_height: usize) {
+    pub fn dispatch_tiled(scene: &Scene, sampler: Sampler, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float, tile_width: usize, tile_height: usize) {
         let mut win = MinifbWindow::new(film.width, film.height);
         let mut win2 = MinifbWindow::new(film.width, film.height);
         let mut win3 = MinifbWindow::new(film.width, film.height);
@@ -96,7 +89,7 @@ impl<'a> Integrator<'a> {
         for x in 0..tiles_hor {
             for y in 0..tiles_ver {
                 let mut tile_film = Film::new(tile_width, tile_height);
-                sample_count += self.dispatch_tile(&mut tile_film, x, y, min_samples, max_samples, variance_target);
+                sample_count += Self::dispatch_tile(scene, sampler, &mut tile_film, x, y, min_samples, max_samples, variance_target);
                 film.overwrite_with(x * tile_width, y * tile_height, &tile_film);
 
                 win.update(&film, SampleCollector::gamma_corrected_mean);
@@ -111,7 +104,8 @@ impl<'a> Integrator<'a> {
         println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
     }
 
-    pub fn dispatch(&self, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
+    // TODO might be neater to factor out the window updates and progress printing
+    pub fn dispatch(scene: &Scene, sampler: Sampler, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
         let mut win = MinifbWindow::new(film.width, film.height);
         let mut win2 = MinifbWindow::new(film.width, film.height);
         let mut win3 = MinifbWindow::new(film.width, film.height);
@@ -127,9 +121,9 @@ impl<'a> Integrator<'a> {
                 for y in 0..film.height {
                     if n < min_samples || film.sample_collector(x, y).max_variance() > variance_target {
                         sample_count += 1;
-                        let (s, t) = self.sampler.get_pixel_sample(x, y);
-                        let r = self.scene.cam.get_ray(s, t);
-                        film.add_sample(x, y, self.li(r, 8));
+                        let (s, t) = sampler.get_pixel_sample(x, y);
+                        let r = scene.cam.get_ray(s, t);
+                        film.add_sample(x, y, Self::li(scene, r, 8));
                     }
                 }
                 print_progress((n * film.width * film.height + x * film.height) as Float / (film.width * film.height * max_samples) as Float);

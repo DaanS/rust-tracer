@@ -12,6 +12,10 @@ fn do_work_dyn(a: i64, b: i64, out: &mut dyn Write) {
     writeln!(out, "{a} + {b} = {}", a + b);
 }
 
+fn do_work_impl(a: i64, b: i64, mut out: impl Write) {
+    writeln!(out, "{a} + {b} = {}", a + b);
+}
+
 struct JobQueue<T> {
     jobs: Mutex<Vec<T>>
 }

@@ -1,5 +1,6 @@
 use crate::{config::Float, random::random_float};
 
+#[derive(Clone, Copy)]
 pub struct CenterSampler {}
 impl CenterSampler {
     pub fn get_pixel_sample(&self, x: usize, y: usize) -> (Float, Float) {
@@ -7,6 +8,7 @@ impl CenterSampler {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct SquareSampler{}
 impl SquareSampler {
     pub fn get_pixel_sample(&self, x: usize, y: usize) -> (Float, Float) {
