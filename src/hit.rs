@@ -5,7 +5,7 @@ use crate::vec3::{Vec3, Point};
 
 pub mod sphere;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct HitRecord {
     pub t: Float,
     pub material: Material,

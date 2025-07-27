@@ -5,7 +5,7 @@ use crate::{
     vec3::{dot, Point}, material::Material,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Sphere {
     pub center: Point,
     pub radius: Float,
@@ -38,7 +38,7 @@ impl Hit for Sphere {
         let pos = r.at(root);
         let normal = (pos - self.center) / self.radius;
 
-        Some(HitRecord { t: root, material: self.material.clone(), normal, pos }) 
+        Some(HitRecord { t: root, material: self.material, normal, pos }) 
     }
 }
 
@@ -49,7 +49,7 @@ impl Hit for Vec<Sphere> {
         let mut cur_t_max = t_max;
 
         for s in self {
-            if let Some(hit_record) = s.hit(r.clone(), t_min, cur_t_max) {
+            if let Some(hit_record) = s.hit(r, t_min, cur_t_max) {
                 cur_t_max = hit_record.t;
                 res = Some(hit_record);
             }

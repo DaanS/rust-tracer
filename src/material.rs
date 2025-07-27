@@ -9,7 +9,7 @@ pub trait Scatter {
     fn scatter(&self, ray_in: Ray, hit: HitRecord) -> Option<ScatterRecord>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Material {
     None,
     Lambertian { color: Color },
