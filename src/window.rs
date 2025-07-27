@@ -18,6 +18,10 @@ impl MinifbWindow {
         MinifbWindow { width, height, buffer: vec![0; width * height], window }
     }
 
+    pub fn set_position(&mut self, x: isize, y: isize) {
+        self.window.set_position(x, y);
+    }
+
     pub fn update<ExtractFunc: Fn(&SampleCollector) -> Color>(& mut self, film: &Film, f: ExtractFunc) {
         for (idx, pixel) in film.pix.iter().enumerate() {
             self.buffer[idx] = color_to_u32(f(pixel));

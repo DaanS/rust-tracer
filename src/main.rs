@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[macro_use]
 mod vec3;
 #[macro_use]
@@ -45,8 +47,15 @@ fn main() {
     let sampler = Sampler{};
     let scene = random_scene(&film);
     // TODO find out good bounds for samples and variance targets
-    Integrator::dispatch_tiled(&scene, sampler, &mut film, 32, SAMPLES, 0.004, 50, 50);
+    //Integrator::dispatch_tiled(&scene, sampler, &mut film, 32, SAMPLES, 0.004, 50, 50);
     //Integrator::dispatch(&scene, sampler, &mut film, 64, SAMPLES, 0.004);
+    //integrator::OldIntegrator::dispatch_threads(&scene, sampler, &mut film, 64, SAMPLES, 0.004, 50, 50, 8);
+    Integrator::new(
+        integrator::SimpleRayEvaluator,
+        //integrator::SimpleDispatcher
+        //integrator::SingleCoreTiledDispatcher::<50, 50>,
+        integrator::MultiCoreTiledDispatcher::<50, 50, 8>,
+    ).dispatch(&scene, sampler, &mut film, 64, SAMPLES, 0.004);
 
     Ppm::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.ppm");
     Png::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.png");

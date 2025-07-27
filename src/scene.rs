@@ -1,5 +1,6 @@
 use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, material::{lambertian, metal, dielectric}, random::{random_float, random_in_range}, ray::Ray, hit::sphere::{Sphere, sphere}, vec3::{vec3, Vec3}};
 
+#[derive(Clone)]
 pub struct Scene {
     pub objects: Vec<Sphere>,
     pub background_color: fn(Ray) -> Color,

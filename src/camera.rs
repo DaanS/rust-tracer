@@ -1,5 +1,6 @@
 use crate::{ray::Ray, ray::ray, config::{Film, Float}, vec3::{Vec3, cross, random_vector_in_unit_disk}, util::radians};
 
+#[derive(Clone)]
 pub struct Camera {
     cam_pos: Vec3,
     pixel_center_upper_left: Vec3,

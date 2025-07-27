@@ -5,6 +5,7 @@ use crate::{
     vec3::{dot, Point}, material::Material,
 };
 
+#[derive(Clone)]
 pub struct Sphere {
     pub center: Point,
     pub radius: Float,
