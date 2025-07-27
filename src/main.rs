@@ -41,7 +41,6 @@ fn variance_stats(film: &Film) {
 fn main() {
     const WIDTH: usize = 800;
     const HEIGHT: usize = 450;
-    const SAMPLES: usize = 129;
     let mut film = Film::new(WIDTH, HEIGHT);
 
     let sampler = Sampler{};
@@ -55,7 +54,7 @@ fn main() {
         //integrator::SimpleDispatcher
         //integrator::SingleCoreTiledDispatcher::<50, 50>,
         integrator::MultiCoreTiledDispatcher::<50, 50, 8>,
-    ).dispatch(&scene, sampler, &mut film, 64, SAMPLES, 0.004);
+    ).dispatch(&scene, sampler, &mut film, 32, 128, 0.004);
 
     Ppm::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.ppm");
     Png::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.png");
