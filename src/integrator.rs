@@ -296,13 +296,13 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
     }
 }
 
-pub struct Integrator<Eval: RayEvaluator, Dispatch: Dispatch> {
+pub struct Integrator<Eval: RayEvaluator, Disp: Dispatch> {
     eval: Eval,
-    dispatch: Dispatch
+    dispatch: Disp
 }
 
-impl<Eval: RayEvaluator, Dispatch: Dispatch> Integrator<Eval, Dispatch> {
-    pub fn new(eval: Eval, dispatch: Dispatch) -> Self {
+impl<Eval: RayEvaluator, Disp: Dispatch> Integrator<Eval, Disp> {
+    pub fn new(eval: Eval, dispatch: Disp) -> Self {
         Integrator { eval, dispatch }
     }
     pub fn dispatch(&mut self, scene: &Scene, sampler: Sampler, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {

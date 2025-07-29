@@ -4,7 +4,6 @@ use crate::ray::Ray;
 use crate::vec3::{Vec3, Point};
 
 pub mod sphere;
-pub mod bvh;
 
 #[derive(Clone, Copy)]
 pub struct HitRecord {

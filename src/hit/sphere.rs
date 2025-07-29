@@ -1,5 +1,5 @@
 use crate::{
-    hit::bvh::AABB, config::Float, hit::{Bound, Hit, HitRecord}, material::Material, ray::Ray, vec3::{dot, Point}
+    config::Float, hit::{Bound, Hit, HitRecord}, material::Material, ray::Ray, vec3::{dot, Point}
 };
 
 #[derive(Clone, Copy)]
@@ -36,16 +36,6 @@ impl Hit for Sphere {
         let normal = (pos - self.center) / self.radius;
 
         Some(HitRecord { t: root, material: self.material, normal, pos }) 
-    }
-}
-
-impl Bound for Sphere {
-    fn bound(&self) -> impl Hit {
-        AABB {
-            x: (self.center.x - self.radius, self.center.x + self.radius).into(),
-            y: (self.center.y - self.radius, self.center.y + self.radius).into(),
-            z: (self.center.z - self.radius, self.center.z + self.radius).into(),
-        }
     }
 }
 
