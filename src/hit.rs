@@ -4,6 +4,7 @@ use crate::ray::Ray;
 use crate::vec3::{Vec3, Point};
 
 pub mod sphere;
+pub mod bvh;
 
 #[derive(Clone, Copy)]
 pub struct HitRecord {
@@ -15,4 +16,8 @@ pub struct HitRecord {
 
 pub trait Hit {
     fn hit(&self, r: Ray, t_min: Float, t_max: Float) -> Option<HitRecord>;
+}
+
+pub trait Bound {
+    fn bound(&self) -> impl Hit;
 }

@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, Div, Index, Mul, Neg, Sub};
 
 use crate::config::Float;
 use crate::random::random_in_range;
@@ -103,6 +103,17 @@ impl Mul<Vec3> for Float { type Output = Vec3;
 
 impl Div<Float> for Vec3 { type Output = Self;
     fn div(self, f: Float) -> Self { vec3(self.x / f, self.y / f, self.z / f) }
+}
+
+impl Index<usize> for Vec3 { type Output = Float;
+    fn index(&self, index: usize) -> &Float {
+        match index {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            _ => panic!("Index out of bounds for Vec3"),
+        }
+    }
 }
 
 #[test]

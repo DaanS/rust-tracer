@@ -4,7 +4,7 @@ use crate::{config::{Color, Float}, util::clamp};
 // maybe move this elsewhere?
 pub fn map_color_component(comp: Float) -> u8 {
     const GAMMA: Float = 2.;
-    (clamp(comp, 0., 1.).powf(1. / GAMMA) * 255 as Float) as u8
+    (clamp(comp, (0., 1.)).powf(1. / GAMMA) * 255 as Float) as u8
 }
 
 pub fn component_gamma(comp: Float) -> Float {
@@ -13,7 +13,7 @@ pub fn component_gamma(comp: Float) -> Float {
 }
 
 pub fn color_component_to_u8(comp: Float) -> u8 {
-    (clamp(comp, 0., 1.) * 255 as Float) as u8
+    (clamp(comp, (0., 1.)) * 255 as Float) as u8
 }
 
 pub fn color_gamma(color: Color) -> Color {
