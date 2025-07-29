@@ -95,12 +95,12 @@ impl RayEvaluator for SimpleRayEvaluator {
 }
 
 // TODO do we want to assume that sampler and evaluator carry state, and if so, what is the scope of that state (tile, thread, something else entirely)?
-pub trait Dispatcher {
+pub trait Dispatch {
     fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float);
 }
 
 pub struct SimpleDispatcher;
-impl Dispatcher for SimpleDispatcher {
+impl Dispatch for SimpleDispatcher {
     // TODO might be neater to factor out the window updates and progress printing
     fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
         let mut win = MinifbWindow::new(film.width, film.height);
@@ -157,7 +157,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize> SingleCoreTiledDispatche
         sample_count
     }
 }
-impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize> Dispatcher for SingleCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT> {
+impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize> Dispatch for SingleCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT> {
     fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
         let mut win = MinifbWindow::new(film.width, film.height);
         let mut win2 = MinifbWindow::new(film.width, film.height);
@@ -211,7 +211,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
         sample_count
     }   
 }
-impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> Dispatcher for MultiCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
+impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> Dispatch for MultiCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
     fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
         let tiles_hor = film.width / TILE_WIDTH + 1.min(film.width % TILE_WIDTH);
         let tiles_ver = film.height / TILE_HEIGHT + 1.min(film.height % TILE_HEIGHT);
@@ -222,6 +222,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
         let film_arc = Arc::new(Mutex::new(replace(film, Film::new(1, 1))));
         let scene_arc = Arc::new(scene.clone());
         let evaluator_arc = Arc::new(evaluator.clone());
+
         let queue = JobQueue::make_shared(Vec::new());
 
         // TODO Would it be better to pass scene and film to the threads instead of to the jobs?
@@ -237,6 +238,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
         }
 
         let sample_count = Arc::new(Mutex::new(0));
+
         let threads: Vec<_> = (0..WORKER_COUNT).map(|i| {
             let queue = queue.clone();
             let sample_count = sample_count.clone();
@@ -294,128 +296,16 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
     }
 }
 
-pub struct Integrator<Eval: RayEvaluator, Dispatch: Dispatcher> {
+pub struct Integrator<Eval: RayEvaluator, Dispatch: Dispatch> {
     eval: Eval,
     dispatch: Dispatch
 }
 
-impl<Eval: RayEvaluator, Dispatch: Dispatcher> Integrator<Eval, Dispatch> {
+impl<Eval: RayEvaluator, Dispatch: Dispatch> Integrator<Eval, Dispatch> {
     pub fn new(eval: Eval, dispatch: Dispatch) -> Self {
         Integrator { eval, dispatch }
     }
     pub fn dispatch(&mut self, scene: &Scene, sampler: Sampler, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
         self.dispatch.dispatch(scene, sampler, self.eval.clone(), film, min_samples, max_samples, variance_target);
-    }
-}
-
-pub struct OldIntegrator;
-
-impl OldIntegrator {
-    fn li(scene: &Scene, r: Ray, max_bounces: usize) -> Color {
-        if max_bounces == 0 { return color_rgb(0., 0., 0.); }
-
-        match scene.objects.hit(r.clone(), 0.001, Float::INFINITY) {
-            Some(hit_record) => match hit_record.material.scatter(r.clone(), hit_record.clone()) {
-                Some(scatter_record) => scatter_record.attenuation * Self::li(scene, scatter_record.out, max_bounces - 1),
-                None => color_rgb(0., 0., 0.)
-            },
-            None => { (scene.background_color)(r) }
-        }
-    }
-
-    pub fn worker_job(scene: Arc<Scene>, sampler: Sampler, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
-        let mut sample_count = 0;
-        let mut local_film = Film::new(tile_width, tile_height);
-
-        for y in 0..tile_height {
-            for x in 0..tile_width {
-                for n in 0..max_samples {
-                    if n >= min_samples && local_film.sample_collector(x, y).max_variance() <= variance_target { break; }
-
-                    sample_count += 1;
-                    let (s, t) = sampler.get_pixel_sample(topleft_x + x, topleft_y + y);
-                    let r = scene.cam.get_ray(s, t);
-                    local_film.add_sample(x, y, Self::li(&scene, r, 8));
-                }
-            }
-        }
-
-        Png::write(tile_width, tile_height, local_film.to_rgb8(|s| color_gamma(s.mean())), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
-        film.lock().unwrap().overwrite_with(topleft_x, topleft_y, &local_film);
-        sample_count
-    }   
-
-    pub fn dispatch_threads(scene: &Scene, sampler: Sampler, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float, tile_width: usize, tile_height: usize, worker_count: usize) {
-        let tiles_hor = film.width / tile_width + 1.min(film.width % tile_width);
-        let tiles_ver = film.height / tile_height + 1.min(film.height % tile_height);
-        let total_samples = film.width * film.height * max_samples;
-
-        let film_arc = Arc::new(Mutex::new(replace(film, Film::new(1, 1))));
-        let scene_arc = Arc::new(scene.clone());
-        let queue = JobQueue::make_shared(Vec::new());
-
-        // Would it be better to pass scene and film to the threads instead of to the jobs?
-        for x in 0..tiles_hor {
-            for y in 0..tiles_ver {
-                let film = film_arc.clone();
-                let scene = scene_arc.clone();
-                queue.add_job(constrain(move |out| 
-                    OldIntegrator::worker_job(scene, sampler, film, (x * tile_width, y * tile_height), (tile_width, tile_height), min_samples, max_samples, variance_target, out)
-                ));
-            }
-        }
-
-        let sample_count = Arc::new(Mutex::new(0));
-        let threads: Vec<_> = (0..worker_count).map(|i| {
-            let queue = queue.clone();
-            let sample_count = sample_count.clone();
-            std::thread::spawn(move || {
-                let mut out = File::create(format!("worker-{i}.log")).unwrap();
-                write!(out, "thread {i} reporting\n").unwrap();
-                while let Some(job) = queue.get_job() {
-                    let local_sample_count = job(&mut out);
-                    write!(out, "finished job with {local_sample_count} samples\n").unwrap();
-                    *sample_count.lock().unwrap() += local_sample_count;
-                }
-                write!(out, "thread {i} done\n").unwrap();
-            })
-        }).collect();
-
-        let prog_thread = std::thread::spawn({
-            let sample_count = sample_count.clone();
-            let film_arc = film_arc.clone();
-            let width = film_arc.lock().unwrap().width;
-            let height = film_arc.lock().unwrap().height;
-            move || {
-                let mut win = MinifbWindow::new(width, height);
-                let mut win2 = MinifbWindow::new(width, height);
-                let mut win3 = MinifbWindow::new(width, height);
-
-                while !queue.jobs.lock().unwrap().is_empty() {
-                    {
-                        let film = film_arc.lock().unwrap();
-                        win.update(&film, SampleCollector::gamma_corrected_mean);
-                        win2.update(&film, SampleCollector::variance);
-                        win3.update(&film, SampleCollector::avg_variance);
-                    }
-
-                    let progress = *sample_count.lock().unwrap() as Float / total_samples as Float;
-                    print_progress(progress);
-
-                    std::thread::sleep(std::time::Duration::from_millis(1000));
-                }
-            }
-        });
-
-        println!("waiting for threads to finish...");
-        for thread in threads { thread.join().unwrap(); }
-        prog_thread.join().unwrap();
-        println!("threads finished");
-
-        let sample_count = *sample_count.lock().unwrap();
-        *film = Arc::into_inner(film_arc).unwrap().into_inner().unwrap();
-
-        println!("");
-        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
     }
 }
