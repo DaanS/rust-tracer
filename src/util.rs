@@ -1,6 +1,6 @@
 use crate::config::{Float, PI};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Interval {
     pub min: Float,
     pub max: Float,
@@ -8,7 +8,20 @@ pub struct Interval {
 
 impl From<(Float, Float)> for Interval {
     fn from((min, max): (Float, Float)) -> Self {
-        Interval { min, max }
+        Self { min, max }
+    }
+}
+
+impl Interval {
+    pub fn enclosing(a: Self, b: Self) -> Self {
+        Self {
+            min: a.min.min(b.min),
+            max: a.max.max(b.max),
+        }
+    }
+
+    pub fn contains(&self, value: Float) -> bool {
+        value >= self.min && value <= self.max
     }
 }
 

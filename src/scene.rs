@@ -1,8 +1,10 @@
-use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, material::{lambertian, metal, dielectric}, random::{random_float, random_in_range}, ray::Ray, hit::sphere::{Sphere, sphere}, vec3::{vec3, Vec3}};
+use std::sync::Arc;
+
+use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{bvh::{AxisAlignedBound, Bvh}, sphere::sphere, Hit}, material::{dielectric, lambertian, metal}, random::{random_float, random_in_range}, ray::Ray, vec3::{vec3, Vec3}};
 
 #[derive(Clone)]
 pub struct Scene {
-    pub objects: Vec<Sphere>,
+    pub objects: Arc<dyn Hit + Send + Sync>,
     pub background_color: fn(Ray) -> Color,
     pub cam: Camera
 }
@@ -24,7 +26,7 @@ pub fn simple_scene(film: &Film) -> Scene {
 
     let cam = Camera::new(&film, vec3!(0, 0, 0), vec3!(0, 0, -1), vec3!(0, 1, 0), 90., 1., 0.6);
 
-    Scene { objects: vec![center_sphere, left_sphere, right_sphere, ground_sphere], background_color: overcast_sky_background, cam }
+    Scene { objects: Arc::new(vec![center_sphere, left_sphere, right_sphere, ground_sphere]), background_color: overcast_sky_background, cam }
 }
 
 pub fn random_scene(film: &Film) -> Scene {
@@ -55,5 +57,6 @@ pub fn random_scene(film: &Film) -> Scene {
 
     let cam = Camera::new(film, vec3!(13, 2, 3), vec3!(0, 0, 0), vec3!(0, 1, 0), 20., 10., 0.6);
 
-    Scene { objects, background_color: overcast_sky_background, cam }
+    let arced_objects = objects.iter().map(|o| Arc::new(o.clone()) as Arc<dyn AxisAlignedBound + Send + Sync>).collect::<Vec<_>>();
+    Scene { objects: Arc::new(Bvh::from_slice(arced_objects.as_slice())), background_color: overcast_sky_background, cam }
 }

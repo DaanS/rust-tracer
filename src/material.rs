@@ -1,5 +1,6 @@
 use crate::{config::{Color, Float}, ray::{ray, Ray}, hit::HitRecord, vec3::{Vec3, dot, random_unit_vector}, random::random_float};
 
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct ScatterRecord {
     pub attenuation: Color,
     pub out: Ray
@@ -9,7 +10,7 @@ pub trait Scatter {
     fn scatter(&self, ray_in: Ray, hit: HitRecord) -> Option<ScatterRecord>;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Material {
     None,
     Lambertian { color: Color },

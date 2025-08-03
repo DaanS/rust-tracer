@@ -1,5 +1,6 @@
+
 use crate::{
-    config::Float, hit::{Bound, Hit, HitRecord}, material::Material, ray::Ray, vec3::{dot, Point}
+    config::Float, hit::{bvh::AABB, Bound, Hit, HitRecord}, material::Material, ray::Ray, vec3::{dot, Point}
 };
 
 #[derive(Clone, Copy)]
@@ -39,6 +40,17 @@ impl Hit for Sphere {
     }
 }
 
+impl Bound for Sphere {
+    type HitType = AABB;
+    fn bound(&self) -> AABB {
+        AABB {
+            x: (self.center.x - self.radius, self.center.x + self.radius).into(),
+            y: (self.center.y - self.radius, self.center.y + self.radius).into(),
+            z: (self.center.z - self.radius, self.center.z + self.radius).into(),
+        }
+    }
+}
+
 // TODO put this somewhere sensible when we get more shapes
 impl Hit for Vec<Sphere> {
     fn hit(&self, r: Ray, t_min: Float, t_max: Float) -> Option<HitRecord> {
@@ -56,27 +68,83 @@ impl Hit for Vec<Sphere> {
     }
 }
 
-#[test]
-fn test_hit_sphere() {
-    let s = sphere((0., 0., 0.), 1., Material::None);
-
-    assert!(s.hit(ray!((-10, 0, 0) -> (1., 0., 0.)), 0., f64::INFINITY).is_some());
-
-    assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
-    assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
-    assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
-
-    assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(-1, 0, 0));
-    assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(1, 0, 0));
-    assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(1, 0, 0));
+impl Bound for Vec<Sphere> {
+    type HitType = AABB;
+    // TODO cache this probably (LazyCell or OnceCell maybe?)
+    // TODO also move this somewhere sensible along with the Hit impl
+    fn bound(&self) -> AABB {
+        self.iter().fold(
+            AABB::new((0., 0.).into(), (0., 0.).into(), (0., 0.).into()),
+            |aabb, s| AABB::enclosing(aabb, s.bound())
+        )
+    }
 }
 
-#[test]
-fn test_hit_vec() {
-    let s1 = sphere((1., 0., 0.), 1., Material::None);
-    let s2 = sphere((-1., 0., 0.), 1., Material::None);
-    let v = vec![s1, s2];
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_ulps_eq;
 
-    assert_eq!(v.hit(ray!((3, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().t, 1.);
-    assert_eq!(v.hit(ray!((-3, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t, 1.);
+    #[test]
+    fn test_hit_sphere() {
+        let s = sphere((0., 0., 0.), 1., Material::None);
+
+        assert!(s.hit(ray!((-10, 0, 0) -> (1., 0., 0.)), 0., f64::INFINITY).is_some());
+
+        assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
+        assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
+        assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
+
+        assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(-1, 0, 0));
+        assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(1, 0, 0));
+        assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(1, 0, 0));
+    }
+
+    #[test]
+    fn test_bound_sphere() {
+        let s = sphere((0., 0., 0.), 1., Material::None);
+        let aabb = s.bound();
+
+        assert_ulps_eq!(aabb.x.min, -1.);
+        assert_ulps_eq!(aabb.x.max, 1.);
+        assert_ulps_eq!(aabb.y.min, -1.);
+        assert_ulps_eq!(aabb.y.max, 1.);
+        assert_ulps_eq!(aabb.z.min, -1.);
+        assert_ulps_eq!(aabb.z.max, 1.);
+    }
+
+    #[test]
+    fn test_hit_vec() {
+        let s1 = sphere((1., 0., 0.), 1., Material::None);
+        let s2 = sphere((-1., 0., 0.), 1., Material::None);
+        let v = vec![s1, s2];
+
+        assert_eq!(v.hit(ray!((3, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().t, 1.);
+        assert_eq!(v.hit(ray!((-3, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t, 1.);
+    }
+
+    #[test]
+    fn test_bound_vec() {
+        let s1 = sphere((1., 0., 0.), 1., Material::None);
+        let s2 = sphere((-1., 0., 0.), 1., Material::None);
+
+        let v = vec![s1, s2];
+        let aabb = v.bound();
+
+        assert_ulps_eq!(aabb.x.min, -2.);
+        assert_ulps_eq!(aabb.x.max, 2.);
+        assert_ulps_eq!(aabb.y.min, -1.);
+        assert_ulps_eq!(aabb.y.max, 1.);
+        assert_ulps_eq!(aabb.z.min, -1.);
+        assert_ulps_eq!(aabb.z.max, 1.);
+
+        let v_empty: Vec<Sphere> = vec![];
+        let aabb_empty = v_empty.bound();
+        assert_ulps_eq!(aabb_empty.x.min, 0.);
+        assert_ulps_eq!(aabb_empty.x.max, 0.);
+        assert_ulps_eq!(aabb_empty.y.min, 0.);
+        assert_ulps_eq!(aabb_empty.y.max, 0.);
+        assert_ulps_eq!(aabb_empty.z.min, 0.);
+        assert_ulps_eq!(aabb_empty.z.max, 0.);
+    }
 }

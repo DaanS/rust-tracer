@@ -9,11 +9,11 @@ mod conversion;
 mod util;
 
 fn do_work_dyn(a: i64, b: i64, out: &mut dyn Write) {
-    writeln!(out, "{a} + {b} = {}", a + b);
+    writeln!(out, "{a} + {b} = {}", a + b).unwrap();
 }
 
 fn do_work_impl(a: i64, b: i64, mut out: impl Write) {
-    writeln!(out, "{a} + {b} = {}", a + b);
+    writeln!(out, "{a} + {b} = {}", a + b).unwrap();
 }
 
 struct JobQueue<T> {
@@ -51,7 +51,7 @@ fn main() {
     );
 
     let queue = JobQueue::make_shared(Vec::new());
-    for i in (0..64) {
+    for i in 0..64 {
         queue.add_job(constrain(move |out| do_work_dyn(i, i + 1, out)));
     }
 
@@ -60,7 +60,7 @@ fn main() {
         let mut out = File::create(format!("worker-{i}.log")).unwrap();
         let queue = Arc::clone(&queue);
         thread::spawn(move || {
-            writeln!(out, "thread {i} reporting");
+            writeln!(out, "thread {i} reporting").unwrap();
             while let Some(job) = queue.get_job() {
                 job(&mut out);
             }

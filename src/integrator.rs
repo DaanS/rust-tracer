@@ -1,7 +1,7 @@
 use std::{fs::File, io::{stdout, Write}, mem::replace, sync::{Arc, Mutex}};
 
 use crate::{
-    color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, hit::Hit, material::Scatter, png::Png, ray::Ray, scene::{Scene}, util::is_power_of_2, window::MinifbWindow, Sampler
+    color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, material::Scatter, png::Png, ray::Ray, scene::{Scene}, util::is_power_of_2, window::MinifbWindow, Sampler
 };
 
 fn print_progress(prog: Float) {
