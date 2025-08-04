@@ -243,7 +243,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
             let queue = queue.clone();
             let sample_count = sample_count.clone();
             std::thread::spawn(move || {
-                let mut out = File::create(format!("worker-{i}.log")).unwrap();
+                let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
                 write!(out, "thread {i} reporting\n").unwrap();
                 while let Some(job) = queue.get_job() {
                     let local_sample_count = job(&mut out);

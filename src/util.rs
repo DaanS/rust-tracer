@@ -8,6 +8,8 @@ pub struct Interval {
 
 impl From<(Float, Float)> for Interval {
     fn from((min, max): (Float, Float)) -> Self {
+        assert!(min <= max, "Interval min must be less than or equal to max");
+        assert!(!min.is_nan() && !max.is_nan(), "Interval values must not be NaN");
         Self { min, max }
     }
 }
@@ -22,6 +24,10 @@ impl Interval {
 
     pub fn contains(&self, value: Float) -> bool {
         value >= self.min && value <= self.max
+    }
+
+    pub fn length(&self) -> Float {
+        self.max - self.min
     }
 }
 

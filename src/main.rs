@@ -24,7 +24,7 @@ use config::Float;
 
 /// le current todos
 
-use crate::{config::{Film, Sampler}, conversion::color_gamma, integrator::Integrator, png::Png, ppm::Ppm, scene::random_scene};
+use crate::{config::{Film, Sampler}, conversion::color_gamma, film::SampleCollector, integrator::Integrator, png::Png, ppm::Ppm, scene::random_scene};
 
 fn variance_stats(film: &Film) {
     let mut vals: Vec<Float> = film.pix.iter().map(|sc| sc.avg_variance().r).collect();
@@ -41,6 +41,7 @@ fn variance_stats(film: &Film) {
 fn main() {
     const WIDTH: usize = 800;
     const HEIGHT: usize = 450;
+    const MAX_SAMPLES: usize = 64;
     let mut film = Film::new(WIDTH, HEIGHT);
 
     let sampler = Sampler{};
@@ -54,10 +55,14 @@ fn main() {
         //integrator::SimpleDispatcher
         //integrator::SingleCoreTiledDispatcher::<50, 50>,
         integrator::MultiCoreTiledDispatcher::<50, 50, 8>,
-    ).dispatch(&scene, sampler, &mut film, 32, 128, 0.004);
+    ).dispatch(&scene, sampler, &mut film, 32, MAX_SAMPLES, 0.004);
 
-    Ppm::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.ppm");
-    Png::write(WIDTH, HEIGHT, film.to_rgb8(|s| color_gamma(s.mean())), "out/out.png");
+    Ppm::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), "out/out.ppm");
+
+    let base_path = format!("out/out-{}x{}@{}", WIDTH, HEIGHT, MAX_SAMPLES);
+    Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), &format!("{}-mean.png", base_path));
+    Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::variance), &format!("{}-variance.png", base_path));
+    Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::avg_variance), &format!("{}-avg-variance.png", base_path));
 
     variance_stats(&film);
 }

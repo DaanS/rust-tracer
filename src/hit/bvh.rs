@@ -29,6 +29,20 @@ impl AABB {
             z: Interval::enclosing(a.z, b.z),
         }
     }
+
+    pub fn longest_axis(&self) -> usize {
+        let x_len = self.x.length();
+        let y_len = self.y.length();
+        let z_len = self.z.length();
+
+        if x_len >= y_len && x_len >= z_len {
+            0
+        } else if y_len >= z_len {
+            1
+        } else {
+            2
+        }
+    }
 }
 
 impl Hit for AABB {
@@ -70,6 +84,18 @@ impl Index<usize> for AABB {
 pub trait AxisAlignedBound: Hit + Bound<HitType = AABB> {}
 impl<T: Hit + Bound<HitType = AABB>> AxisAlignedBound for T {}
 
+impl Bound for &[Arc<dyn AxisAlignedBound + Send + Sync>] {
+    type HitType = AABB;
+
+    // TODO cache this probably (LazyCell or OnceCell maybe?)
+    fn bound(&self) -> AABB {
+        self.iter().fold(
+            AABB::new((0., 0.).into(), (0., 0.).into(), (0., 0.).into()),
+            |aabb, s| AABB::enclosing(aabb, s.bound())
+        )
+    }
+}
+
 pub struct Bvh {
     pub aabb: AABB,
     pub left: Arc<dyn AxisAlignedBound + Send + Sync>,
@@ -87,14 +113,26 @@ impl Bvh {
             0 => panic!("Cannot create BVH from an empty slice"),
             1 => { Bvh::new(objects[0].clone(), objects[0].clone()) },
             2 => { Bvh::new(objects[0].clone(), objects[1].clone()) },
-            3 => { Bvh::new(objects[0].clone(), Arc::new(Bvh::new(objects[1].clone(), objects[2].clone()))) },
             _ => {
+                let aabb = objects.bound();
+
                 let mut objects = Vec::from(objects);
                 objects.sort_by(|a, b| {
-                    a.bound()[0].min.partial_cmp(&b.bound()[0].min).unwrap()
+                    let axis = aabb.longest_axis();
+                    a.bound()[axis].min.partial_cmp(&b.bound()[axis].min).unwrap()
                 });
+
                 let (left_objects, right_objects) = objects.split_at(objects.len() / 2);
-                Bvh::new(Arc::new(Bvh::from_slice(left_objects)), Arc::new(Bvh::from_slice(right_objects)))
+                assert!(left_objects.len() <= right_objects.len(), "Left side of BVH must not be greater than right side");
+                Bvh {
+                    aabb,
+                    left: if left_objects.len() == 1 {
+                        left_objects[0].clone()
+                    } else {
+                        Arc::new(Bvh::from_slice(left_objects))
+                    },
+                    right: Arc::new(Bvh::from_slice(right_objects))
+                }
             }
         }
     }

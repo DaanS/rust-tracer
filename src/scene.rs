@@ -30,7 +30,8 @@ pub fn simple_scene(film: &Film) -> Scene {
 }
 
 pub fn random_scene(film: &Film) -> Scene {
-    for _i in 0..16 { random_float(); }
+    //for _i in 0..16 { random_float(); }
+    for _i in 0..40315 { random_float(); }
 
     let ground_sphere = sphere((0., -1000., 0.), 1000., lambertian((1., 1., 0.)));
     let glass_sphere = sphere((0., 1., 0.), 1., dielectric(1.5));
