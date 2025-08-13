@@ -53,13 +53,6 @@ impl<T> JobQueue<T> {
     }
 }
 
-fn constrain<F>(f: F) -> F
-where
-    F: for<'a> FnOnce(&'a mut dyn Write) -> usize
-{
-    f
-}
-
 /// integrator concepts
 ///
 /// for pixel based approaches:
@@ -231,9 +224,9 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
                 let film = film_arc.clone();
                 let scene = scene_arc.clone();
                 let evaluator = evaluator_arc.clone();
-                queue.add_job(constrain(move |out| 
+                queue.add_job(move |out: &mut dyn Write| 
                     Self::worker_job(scene, sampler, evaluator, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
-                ));
+                );
             }
         }
 

@@ -38,21 +38,14 @@ impl<T> JobQueue<T> {
     }
 }
 
-fn constrain<F>(f: F) -> F
-where
-    F: for<'a> Fn(&'a mut dyn Write)
-{
-    f
-}
-
 fn main() {
     let queue = JobQueue::make_shared(
-        (0..64).map(|i| constrain(move |out| do_work_dyn(i, i + 1, out))).collect()
+        (0..64).map(|i| move |out: &mut dyn Write| do_work_dyn(i, i + 1, out)).collect()
     );
 
     let queue = JobQueue::make_shared(Vec::new());
     for i in 0..64 {
-        queue.add_job(constrain(move |out| do_work_dyn(i, i + 1, out)));
+        queue.add_job(move |out: &mut dyn Write| do_work_dyn(i, i + 1, out));
     }
 
 
