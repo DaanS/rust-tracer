@@ -18,19 +18,6 @@ fn print_progress(prog: Float) {
     stdout().flush().unwrap();
 }
 
-struct RenderRegionJob<'a> {
-    x: usize,
-    y: usize,
-    width: usize,
-    height: usize,
-    min_samples: usize,
-    max_samples: usize,
-    variance_target: Float,
-    scene: &'a Scene,
-    sampler: Sampler,
-    film: Film
-}
-
 struct JobQueue<T> {
     jobs: Mutex<Vec<T>>
 }
@@ -78,7 +65,7 @@ impl RayEvaluator for SimpleRayEvaluator {
         if max_bounces == 0 { return color_rgb(0., 0., 0.); }
 
         match scene.objects.hit(r.clone(), 0.001, Float::INFINITY) {
-            Some(hit_record) => match hit_record.material.scatter(r.clone(), hit_record.clone()) {
+            Some(hit_record) => match hit_record.material.scatter(r, hit_record) {
                 Some(scatter_record) => scatter_record.attenuation * self.li(scene, scatter_record.out, max_bounces - 1),
                 None => color_rgb(0., 0., 0.)
             },
@@ -182,7 +169,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize> Dispatch for SingleCoreT
 
 pub struct MultiCoreTiledDispatcher<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize>;
 impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> MultiCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
-    pub fn worker_job(scene: Arc<Scene>, sampler: Sampler, evaluator: Arc<impl RayEvaluator>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
+    fn worker_job(scene: Arc<Scene>, sampler: Sampler, evaluator: Arc<impl RayEvaluator>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
         let mut sample_count = 0;
         let mut local_film = Film::new(tile_width, tile_height);
 
@@ -203,27 +190,23 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
         film.lock().unwrap().overwrite_with(topleft_x, topleft_y, &local_film);
         sample_count
     }   
-}
-impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> Dispatch for MultiCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
-    fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
-        let tiles_hor = film.width / TILE_WIDTH + 1.min(film.width % TILE_WIDTH);
-        let tiles_ver = film.height / TILE_HEIGHT + 1.min(film.height % TILE_HEIGHT);
-        let total_samples = film.width * film.height * max_samples;
 
-        // TODO Arc and Mutex desire ownership, but we want the dispatch interface to not have to be thread-aware.
-        // But this leads to excessive cloning here. Can we fix that?
-        let film_arc = Arc::new(Mutex::new(replace(film, Film::new(1, 1))));
-        let scene_arc = Arc::new(scene.clone());
-        let evaluator_arc = Arc::new(evaluator.clone());
+    pub fn dispatch_inner(&self, scene: Arc<Scene>, sampler: Sampler, evaluator: Arc<impl RayEvaluator>, film: Arc<Mutex<Film>>, min_samples: usize, max_samples: usize, variance_target: Float) {
+        // compute some sizes that we'll need later
+        let width = film.lock().unwrap().width;
+        let height = film.lock().unwrap().height;
+        let tiles_hor = width / TILE_WIDTH + 1.min(width % TILE_WIDTH);
+        let tiles_ver = height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT);
+        let total_samples = width * height * max_samples;
 
         let queue = JobQueue::make_shared(Vec::new());
 
-        // TODO Would it be better to pass scene and film to the threads instead of to the jobs?
+        // create jobs for each tile
         for x in 0..tiles_hor {
             for y in 0..tiles_ver {
-                let film = film_arc.clone();
-                let scene = scene_arc.clone();
-                let evaluator = evaluator_arc.clone();
+                let film = film.clone();
+                let scene = scene.clone();
+                let evaluator = evaluator.clone();
                 queue.add_job(move |out: &mut dyn Write| 
                     Self::worker_job(scene, sampler, evaluator, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
                 );
@@ -232,26 +215,28 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
 
         let sample_count = Arc::new(Mutex::new(0));
 
+        // spawn worker threads to process the jobs
         let threads: Vec<_> = (0..WORKER_COUNT).map(|i| {
-            let queue = queue.clone();
-            let sample_count = sample_count.clone();
-            std::thread::spawn(move || {
-                let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
-                write!(out, "thread {i} reporting\n").unwrap();
-                while let Some(job) = queue.get_job() {
-                    let local_sample_count = job(&mut out);
-                    write!(out, "finished job with {local_sample_count} samples\n").unwrap();
-                    *sample_count.lock().unwrap() += local_sample_count;
+            std::thread::spawn({
+                let queue = queue.clone();
+                let sample_count = sample_count.clone();
+                move || {
+                    let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
+                    write!(out, "thread {i} reporting\n").unwrap();
+                    while let Some(job) = queue.get_job() {
+                        let local_sample_count = job(&mut out);
+                        write!(out, "finished job with {local_sample_count} samples\n").unwrap();
+                        *sample_count.lock().unwrap() += local_sample_count;
+                    }
+                    write!(out, "thread {i} done\n").unwrap();
                 }
-                write!(out, "thread {i} done\n").unwrap();
             })
         }).collect();
 
+        // spawn a thread to update the window and print progress
         let prog_thread = std::thread::spawn({
             let sample_count = sample_count.clone();
-            let film_arc = film_arc.clone();
-            let width = film_arc.lock().unwrap().width;
-            let height = film_arc.lock().unwrap().height;
+            let film = film.clone();
             move || {
                 let mut win = MinifbWindow::new(width, height);
                 win.set_position(0, 0);
@@ -265,7 +250,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
                     print_progress(progress);
 
                     {
-                        let film = film_arc.lock().unwrap();
+                        let film = film.lock().unwrap();
                         win.update(&film, SampleCollector::gamma_corrected_mean);
                         win2.update(&film, SampleCollector::variance);
                         win3.update(&film, SampleCollector::avg_variance);
@@ -282,11 +267,26 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
         println!("threads finished");
 
         let sample_count = *sample_count.lock().unwrap();
-        *film = Arc::into_inner(film_arc).unwrap().into_inner().unwrap();
 
         println!("");
-        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
+        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (width * height * max_samples) as Float);
     }
+}
+
+impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> Dispatch for MultiCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
+    fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
+        // TODO Arc and Mutex desire ownership, but we want the dispatch interface to not have to be thread-aware.
+        // But this leads to excessive cloning here. Can we fix that?
+
+        let film_arc = Arc::new(Mutex::new(replace(film, Film::new(1, 1))));
+        let scene_arc = Arc::new(scene.clone());
+        let evaluator_arc = Arc::new(evaluator);
+
+        self.dispatch_inner(scene_arc, sampler, evaluator_arc, film_arc.clone(), min_samples, max_samples, variance_target);
+
+        *film = Arc::into_inner(film_arc).unwrap().into_inner().unwrap();
+    }
+
 }
 
 pub struct Integrator<Eval: RayEvaluator, Disp: Dispatch> {

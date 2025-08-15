@@ -20,11 +20,9 @@ mod sampler;
 mod window;
 mod conversion;
 
-use config::Float;
-
 /// le current todos
 
-use crate::{config::{Film, Sampler}, conversion::color_gamma, film::SampleCollector, integrator::Integrator, png::Png, ppm::Ppm, scene::random_scene};
+use crate::{config::{Film, Float, Sampler}, film::SampleCollector, integrator::Integrator, png::Png, ppm::Ppm, scene::random_scene};
 
 fn variance_stats(film: &Film) {
     let mut vals: Vec<Float> = film.pix.iter().map(|sc| sc.avg_variance().r).collect();
