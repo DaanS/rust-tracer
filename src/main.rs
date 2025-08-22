@@ -22,7 +22,7 @@ mod conversion;
 
 /// le current todos
 
-use crate::{config::{Film, Float, Sampler}, film::SampleCollector, integrator::Integrator, png::Png, ppm::Ppm, scene::random_scene};
+use crate::{config::{Film, Float}, film::SampleCollector, integrator::{Integrate, MultiCoreTiledIntegrator}, png::Png, ppm::Ppm, scene::random_scene};
 
 fn variance_stats(film: &Film) {
     let mut vals: Vec<Float> = film.pix.iter().map(|sc| sc.avg_variance().r).collect();
@@ -40,20 +40,14 @@ fn main() {
     const WIDTH: usize = 800;
     const HEIGHT: usize = 450;
     const MAX_SAMPLES: usize = 64;
+
+    type Sampler = sampler::SquareSampler;
+    type Evaluator = integrator::SimpleRayEvaluator;
+
     let mut film = Film::new(WIDTH, HEIGHT);
 
-    let sampler = Sampler{};
     let scene = random_scene(&film);
-    // TODO find out good bounds for samples and variance targets
-    //Integrator::dispatch_tiled(&scene, sampler, &mut film, 32, SAMPLES, 0.004, 50, 50);
-    //Integrator::dispatch(&scene, sampler, &mut film, 64, SAMPLES, 0.004);
-    //integrator::OldIntegrator::dispatch_threads(&scene, sampler, &mut film, 64, SAMPLES, 0.004, 50, 50, 8);
-    Integrator::new(
-        integrator::SimpleRayEvaluator,
-        //integrator::SimpleDispatcher
-        //integrator::SingleCoreTiledDispatcher::<50, 50>,
-        integrator::MultiCoreTiledDispatcher::<50, 50, 8>,
-    ).dispatch(&scene, sampler, &mut film, 32, MAX_SAMPLES, 0.004);
+    MultiCoreTiledIntegrator::<Sampler, Evaluator, 50, 50, 8>::integrate(&scene, &mut film, 32, MAX_SAMPLES, 0.004);
 
     Ppm::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), "out/out.ppm");
 

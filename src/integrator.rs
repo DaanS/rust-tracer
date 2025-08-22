@@ -1,8 +1,42 @@
 use std::{fs::File, io::{stdout, Write}, mem::replace, sync::{Arc, Mutex}};
 
 use crate::{
-    color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, material::Scatter, png::Png, ray::Ray, scene::{Scene}, util::is_power_of_2, window::MinifbWindow, Sampler
+    color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::{self, PixelSample}, scene::Scene, util::is_power_of_2, window::MinifbWindow,
 };
+
+/// integrator concepts
+///
+/// for pixel based approaches:
+/// - dispatch parts of image (e.g. tiles) -> Film
+/// - generate samples for pixels -> Sampler
+/// - turn samples into rays -> Camera
+/// - calculate radiance contribution for rays
+
+// Apparently we need 'static here because otherwise the compiler assumes that implementations might contain
+// non-'static references, even when they get cloned into an Arc.
+pub trait RayEvaluator: Default {
+    fn li(&self, scene: &Scene, r: Ray, max_bounces: usize) -> Color;
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct SimpleRayEvaluator;
+impl RayEvaluator for SimpleRayEvaluator {
+    // TODO we could probably carry depth and attenuation info in the ray itself
+    // maybe we could use this to make li non-recursive?
+    // but then how do we return the final result to the dispatcher?
+    // and would a larger ray struct negatively impact hit detection performance?
+    fn li(&self, scene: &Scene, r: Ray, max_bounces: usize) -> Color {
+        if max_bounces == 0 { return color_rgb(0., 0., 0.); }
+
+        match scene.objects.hit(r.clone(), 0.001, Float::INFINITY) {
+            Some(hit_record) => match hit_record.material.scatter(r, hit_record) {
+                Some(scatter_record) => scatter_record.attenuation * self.li(scene, scatter_record.out, max_bounces - 1),
+                None => color_rgb(0., 0., 0.)
+            },
+            None => { (scene.background_color)(r) }
+        }
+    }
+}
 
 fn print_progress(prog: Float) {
     const WIDTH: usize = 70;
@@ -16,6 +50,111 @@ fn print_progress(prog: Float) {
     for _i in (pos + 1)..WIDTH { write!(lock, " ").unwrap(); }
     write!(lock, "] {}%\r", (prog * 100.) as usize).unwrap();
     stdout().flush().unwrap();
+}
+
+// TODO do we want to assume that sampler and evaluator carry state, and if so, what is the scope of that state (tile, thread, something else entirely)?
+pub trait Integrate {
+    fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float);
+}
+
+pub struct SimpleIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator> {
+    _sampler: std::marker::PhantomData<Sampler>,
+    _evaluator: std::marker::PhantomData<Evaluator>,
+}
+
+impl<Sampler: PixelSample, Evaluator: RayEvaluator> Integrate for SimpleIntegrator<Sampler, Evaluator> {
+    // TODO might be neater to factor out the window updates and progress printing
+    fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
+        let mut win = MinifbWindow::new(film.width, film.height);
+        let mut win2 = MinifbWindow::new(film.width, film.height);
+        let mut win3 = MinifbWindow::new(film.width, film.height);
+
+        let mut sample_count = 0;
+        let sampler = Sampler::default();
+        let evaluator = Evaluator::default();
+
+        for n in 0..max_samples {
+            win.update(&film, SampleCollector::gamma_corrected_mean);
+            win2.update(&film, SampleCollector::variance);
+            win3.update(&film, SampleCollector::avg_variance);
+
+            for x in 0..film.width {
+                for y in 0..film.height {
+                    if n < min_samples || film.sample_collector(x, y).max_variance() > variance_target {
+                        sample_count += 1;
+                        let (s, t) = sampler.pixel_sample(x, y);
+                        let r = scene.cam.get_ray(s, t);
+                        film.add_sample(x, y, evaluator.li(scene, r, 8));
+                    }
+                }
+                print_progress((n * film.width * film.height + x * film.height) as Float / (film.width * film.height * max_samples) as Float);
+            }
+
+            if (n == 0) || is_power_of_2(n) {
+                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::gamma_corrected_mean), format!("out/mean-{n}.png").as_str());
+                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::variance), format!("out/variance-{n}.png").as_str());
+                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::avg_variance), format!("out/avg_variance-{n}.png").as_str());
+            }
+        }
+
+        println!("");
+        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
+    }
+}
+
+pub struct SingleCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize> {
+    _sampler: std::marker::PhantomData<Sampler>,
+    _evaluator: std::marker::PhantomData<Evaluator>,
+}
+
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize> SingleCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT> {
+    fn dispatch_tile(scene: &Scene, film: &mut Film, tile_x: usize, tile_y: usize, min_samples: usize, max_samples: usize, variance_target: Float) -> usize {
+        let mut sample_count = 0;
+        let sampler = Sampler::default();
+        let evaluator = Evaluator::default();
+        for y in 0..film.height {
+            for x in 0..film.width {
+                for n in 0..max_samples {
+                    if n >= min_samples && film.sample_collector(x, y).max_variance() <= variance_target { break; }
+
+                    sample_count += 1;
+                    let (s, t) = sampler.pixel_sample(x + tile_x * film.width, y + tile_y * film.height);
+                    let r = scene.cam.get_ray(s, t);
+                    film.add_sample(x, y, evaluator.li(scene, r, 8));
+                }
+            }
+        }
+        sample_count
+    }
+}
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize> Integrate for SingleCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT> {
+    fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
+        let mut win = MinifbWindow::new(film.width, film.height);
+        let mut win2 = MinifbWindow::new(film.width, film.height);
+        let mut win3 = MinifbWindow::new(film.width, film.height);
+
+        let tiles_hor = film.width / TILE_WIDTH + 1.min(film.width % TILE_WIDTH);
+        let tiles_ver = film.height / TILE_HEIGHT + 1.min(film.height % TILE_HEIGHT);
+
+        let mut sample_count = 0;
+
+        for x in 0..tiles_hor {
+            for y in 0..tiles_ver {
+                let mut tile_film = Film::new(TILE_WIDTH, TILE_HEIGHT);
+                sample_count += Self::dispatch_tile(scene, &mut tile_film, x, y, min_samples, max_samples, variance_target);
+                film.overwrite_with(x * TILE_WIDTH, y * TILE_HEIGHT, &tile_film);
+
+                win.update(&film, SampleCollector::gamma_corrected_mean);
+                win2.update(&film, SampleCollector::variance);
+                win3.update(&film, SampleCollector::avg_variance);
+
+                print_progress((y + x * tiles_ver) as Float / (tiles_hor * tiles_ver) as Float);
+            }
+        }
+
+        println!("");
+        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
+    }
 }
 
 struct JobQueue<T> {
@@ -40,138 +179,17 @@ impl<T> JobQueue<T> {
     }
 }
 
-/// integrator concepts
-///
-/// for pixel based approaches:
-/// - dispatch parts of image (e.g. tiles) -> Film
-/// - generate samples for pixels -> Sampler
-/// - turn samples into rays -> Camera
-/// - calculate radiance contribution for rays
-
-// Apparently we need 'static here because otherwise the compiler assumes that implementations might contain
-// non-'static references, even when they get cloned into an Arc.
-pub trait RayEvaluator: Send + Sync + Clone + 'static {
-    fn li(&self, scene: &Scene, r: Ray, max_bounces: usize) -> Color;
+pub struct MultiCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> {
+    _sampler: std::marker::PhantomData<Sampler>,
+    _evaluator: std::marker::PhantomData<Evaluator>,
 }
 
-#[derive(Clone, Copy)]
-pub struct SimpleRayEvaluator;
-impl RayEvaluator for SimpleRayEvaluator {
-    // TODO we could probably carry depth and attenuation info in the ray itself
-    // maybe we could use this to make li non-recursive?
-    // but then how do we return the final result to the dispatcher?
-    // and would a larger ray struct negatively impact hit detection performance?
-    fn li(&self, scene: &Scene, r: Ray, max_bounces: usize) -> Color {
-        if max_bounces == 0 { return color_rgb(0., 0., 0.); }
-
-        match scene.objects.hit(r.clone(), 0.001, Float::INFINITY) {
-            Some(hit_record) => match hit_record.material.scatter(r, hit_record) {
-                Some(scatter_record) => scatter_record.attenuation * self.li(scene, scatter_record.out, max_bounces - 1),
-                None => color_rgb(0., 0., 0.)
-            },
-            None => { (scene.background_color)(r) }
-        }
-    }
-}
-
-// TODO do we want to assume that sampler and evaluator carry state, and if so, what is the scope of that state (tile, thread, something else entirely)?
-pub trait Dispatch {
-    fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float);
-}
-
-pub struct SimpleDispatcher;
-impl Dispatch for SimpleDispatcher {
-    // TODO might be neater to factor out the window updates and progress printing
-    fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
-        let mut win = MinifbWindow::new(film.width, film.height);
-        let mut win2 = MinifbWindow::new(film.width, film.height);
-        let mut win3 = MinifbWindow::new(film.width, film.height);
-
-        let mut sample_count = 0;
-
-        for n in 0..max_samples {
-            win.update(&film, SampleCollector::gamma_corrected_mean);
-            win2.update(&film, SampleCollector::variance);
-            win3.update(&film, SampleCollector::avg_variance);
-
-            for x in 0..film.width {
-                for y in 0..film.height {
-                    if n < min_samples || film.sample_collector(x, y).max_variance() > variance_target {
-                        sample_count += 1;
-                        let (s, t) = sampler.get_pixel_sample(x, y);
-                        let r = scene.cam.get_ray(s, t);
-                        film.add_sample(x, y, evaluator.li(scene, r, 8));
-                    }
-                }
-                print_progress((n * film.width * film.height + x * film.height) as Float / (film.width * film.height * max_samples) as Float);
-            }
-
-            if (n == 0) || is_power_of_2(n) {
-                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::gamma_corrected_mean), format!("out/mean-{n}.png").as_str());
-                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::variance), format!("out/variance-{n}.png").as_str());
-                Png::write(film.width, film.height, film.to_rgb8(SampleCollector::avg_variance), format!("out/avg_variance-{n}.png").as_str());
-            }
-        }
-
-        println!("");
-        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
-    }
-}
-
-pub struct SingleCoreTiledDispatcher<const TILE_WIDTH: usize, const TILE_HEIGHT: usize>;
-impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize> SingleCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT> {
-    fn dispatch_tile(scene: &Scene, sampler: Sampler, evaluator: &impl RayEvaluator, film: &mut Film, tile_x: usize, tile_y: usize, min_samples: usize, max_samples: usize, variance_target: Float) -> usize {
-        let mut sample_count = 0;
-        for y in 0..film.height {
-            for x in 0..film.width {
-                for n in 0..max_samples {
-                    if n >= min_samples && film.sample_collector(x, y).max_variance() <= variance_target { break; }
-
-                    sample_count += 1;
-                    let (s, t) = sampler.get_pixel_sample(x + tile_x * film.width, y + tile_y * film.height);
-                    let r = scene.cam.get_ray(s, t);
-                    film.add_sample(x, y, evaluator.li(scene, r, 8));
-                }
-            }
-        }
-        sample_count
-    }
-}
-impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize> Dispatch for SingleCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT> {
-    fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
-        let mut win = MinifbWindow::new(film.width, film.height);
-        let mut win2 = MinifbWindow::new(film.width, film.height);
-        let mut win3 = MinifbWindow::new(film.width, film.height);
-
-        let tiles_hor = film.width / TILE_WIDTH + 1.min(film.width % TILE_WIDTH);
-        let tiles_ver = film.height / TILE_HEIGHT + 1.min(film.height % TILE_HEIGHT);
-
-        let mut sample_count = 0;
-
-        for x in 0..tiles_hor {
-            for y in 0..tiles_ver {
-                let mut tile_film = Film::new(TILE_WIDTH, TILE_HEIGHT);
-                sample_count += Self::dispatch_tile(scene, sampler, &evaluator, &mut tile_film, x, y, min_samples, max_samples, variance_target);
-                film.overwrite_with(x * TILE_WIDTH, y * TILE_HEIGHT, &tile_film);
-
-                win.update(&film, SampleCollector::gamma_corrected_mean);
-                win2.update(&film, SampleCollector::variance);
-                win3.update(&film, SampleCollector::avg_variance);
-
-                print_progress((y + x * tiles_ver) as Float / (tiles_hor * tiles_ver) as Float);
-            }
-        }
-
-        println!("");
-        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
-    }
-}
-
-pub struct MultiCoreTiledDispatcher<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize>;
-impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> MultiCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
-    fn worker_job(scene: Arc<Scene>, sampler: Sampler, evaluator: Arc<impl RayEvaluator>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> MultiCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
+    fn render_tile(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
         let mut sample_count = 0;
         let mut local_film = Film::new(tile_width, tile_height);
+        let sampler = Sampler::default();
+        let evaluator = Evaluator::default();
 
         for y in 0..tile_height {
             for x in 0..tile_width {
@@ -179,7 +197,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
                     if n >= min_samples && local_film.sample_collector(x, y).max_variance() <= variance_target { break; }
 
                     sample_count += 1;
-                    let (s, t) = sampler.get_pixel_sample(topleft_x + x, topleft_y + y);
+                    let (s, t) = sampler.pixel_sample(topleft_x + x, topleft_y + y);
                     let r = scene.cam.get_ray(s, t);
                     local_film.add_sample(x, y, evaluator.li(&scene, r, 8));
                 }
@@ -191,7 +209,7 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
         sample_count
     }   
 
-    pub fn dispatch_inner(&self, scene: Arc<Scene>, sampler: Sampler, evaluator: Arc<impl RayEvaluator>, film: Arc<Mutex<Film>>, min_samples: usize, max_samples: usize, variance_target: Float) {
+    pub fn integrate_inner(scene: Arc<Scene>, film: Arc<Mutex<Film>>, min_samples: usize, max_samples: usize, variance_target: Float) {
         // compute some sizes that we'll need later
         let width = film.lock().unwrap().width;
         let height = film.lock().unwrap().height;
@@ -206,9 +224,8 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
             for y in 0..tiles_ver {
                 let film = film.clone();
                 let scene = scene.clone();
-                let evaluator = evaluator.clone();
                 queue.add_job(move |out: &mut dyn Write| 
-                    Self::worker_job(scene, sampler, evaluator, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
+                    Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
                 );
             }
         }
@@ -273,32 +290,17 @@ impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usiz
     }
 }
 
-impl<const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> Dispatch for MultiCoreTiledDispatcher<TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
-    fn dispatch(&self, scene: &Scene, sampler: Sampler, evaluator: impl RayEvaluator, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> Integrate for MultiCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
+    fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
         // TODO Arc and Mutex desire ownership, but we want the dispatch interface to not have to be thread-aware.
         // But this leads to excessive cloning here. Can we fix that?
 
         let film_arc = Arc::new(Mutex::new(replace(film, Film::new(1, 1))));
         let scene_arc = Arc::new(scene.clone());
-        let evaluator_arc = Arc::new(evaluator);
 
-        self.dispatch_inner(scene_arc, sampler, evaluator_arc, film_arc.clone(), min_samples, max_samples, variance_target);
+        Self::integrate_inner(scene_arc, film_arc.clone(), min_samples, max_samples, variance_target);
 
         *film = Arc::into_inner(film_arc).unwrap().into_inner().unwrap();
     }
 
-}
-
-pub struct Integrator<Eval: RayEvaluator, Disp: Dispatch> {
-    eval: Eval,
-    dispatch: Disp
-}
-
-impl<Eval: RayEvaluator, Disp: Dispatch> Integrator<Eval, Disp> {
-    pub fn new(eval: Eval, dispatch: Disp) -> Self {
-        Integrator { eval, dispatch }
-    }
-    pub fn dispatch(&mut self, scene: &Scene, sampler: Sampler, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
-        self.dispatch.dispatch(scene, sampler, self.eval.clone(), film, min_samples, max_samples, variance_target);
-    }
 }

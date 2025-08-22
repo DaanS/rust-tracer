@@ -11,7 +11,7 @@ impl Ppm {
         Ppm{width, height, pix}
     }
 
-    pub fn write_impl(&self, path_str: &str) {
+    fn write_impl(&self, path_str: &str) {
         let mut buf = String::new();
         write!(buf, "{}", self).unwrap();
 
