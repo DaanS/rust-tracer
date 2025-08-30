@@ -4,16 +4,6 @@ use crate::{
     color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::PixelSample, scene::Scene, util::is_power_of_2, window::MinifbWindow,
 };
 
-/// integrator concepts
-///
-/// for pixel based approaches:
-/// - dispatch parts of image (e.g. tiles) -> Film
-/// - generate samples for pixels -> Sampler
-/// - turn samples into rays -> Camera
-/// - calculate radiance contribution for rays
-
-// Apparently we need 'static here because otherwise the compiler assumes that implementations might contain
-// non-'static references, even when they get cloned into an Arc.
 pub trait RayEvaluator: Default {
     fn li(&self, scene: &Scene, r: Ray, max_bounces: usize) -> Color;
 }
@@ -51,6 +41,10 @@ fn print_progress(prog: Float) {
     write!(lock, "] {}%\r", (prog * 100.) as usize).unwrap();
     stdout().flush().unwrap();
 }
+
+// Integrator takes a scene and renders it onto a film, following sample size and variance targets
+// We iterate over pixels, generating subpixel samples using a Sampler. Scene contains a Camera that maps these
+// film-space samples to world-space rays. A RayEvaluator then computes the radiance contribution for each ray.
 
 pub trait Integrate {
     fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float);
@@ -182,6 +176,33 @@ impl<T> JobQueue<T> {
     }
 }
 
+struct CoordinateRange(std::ops::Range<usize>, std::ops::Range<usize>);
+
+impl CoordinateRange {
+    fn iter(&self) -> CoordinateRangeIterator {
+        let mut first = self.0.clone();
+        let start = first.next().unwrap_or(0);
+        CoordinateRangeIterator(first, self.1.clone(), start)
+    }
+}
+
+struct CoordinateRangeIterator(std::ops::Range<usize>, std::ops::Range<usize>, usize);
+
+impl Iterator for CoordinateRangeIterator {
+    type Item = (usize, usize);
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(y) = self.1.next() {
+            Some((self.2, y))
+        } else if let Some(x) = self.0.next() {
+            self.1 = 0..self.1.end;
+            self.2 = x;
+            Some((x, self.1.next().unwrap()))
+        } else {
+            None
+        }
+    }
+}
+
 pub struct MultiCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> {
     _sampler: std::marker::PhantomData<Sampler>,
     _evaluator: std::marker::PhantomData<Evaluator>,
@@ -196,7 +217,6 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
         let sample_count = Arc::new(Mutex::new(0));
         let threads = Self::spawn_workers(queue.clone(), sample_count.clone());
-
         let prog_thread = Self::spawn_progress_thread(queue.clone(), film.clone(), sample_count.clone(), (width, height), max_samples);
 
         println!("waiting for threads to finish...");
@@ -213,20 +233,13 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
     fn queue_jobs(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (width, height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float) -> Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>> {
         let tiles_hor = width / TILE_WIDTH + 1.min(width % TILE_WIDTH);
         let tiles_ver = height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT);
-        let queue = JobQueue::make_shared(Vec::new());
 
-        // create jobs for each tile
-        for x in 0..tiles_hor {
-            for y in 0..tiles_ver {
-                let film = film.clone();
-                let scene = scene.clone();
-                queue.add_job(move |out: &mut dyn Write| 
-                    Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
-                );
-            }
-        }
-
-        queue
+        JobQueue::make_shared(CoordinateRange(0..tiles_hor, 0..tiles_ver).iter().map(|(x, y)| {
+            let film = film.clone();
+            let scene = scene.clone();
+            move |out: &mut dyn Write| 
+                Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
+        }).collect())
     }
 
     fn render_tile(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
@@ -261,7 +274,6 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                 let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
                 write!(out, "thread {i} reporting\n").unwrap();
                 while let Some(job) = queue.get_job() {
-                    write!(out, "starting job...\n").unwrap();
                     let local_sample_count = job(&mut out);
                     write!(out, "finished job with {local_sample_count} samples\n").unwrap();
                     *sample_count.lock().unwrap() += local_sample_count;
@@ -273,10 +285,10 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
     fn spawn_progress_thread(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, film: Arc<Mutex<Film>>, sample_count: Arc<Mutex<usize>>, (width, height): (usize, usize), max_samples: usize) -> std::thread::JoinHandle<()> {
         std::thread::spawn(move || {
-            let total_samples = width * height * max_samples;
             let mut win = MinifbWindow::positioned(width, height, 0, 0);
             let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
             let mut win3 = MinifbWindow::positioned(width, height, width as isize, height as isize);
+            let total_samples = width * height * max_samples;
 
             while !queue.is_empty() {
                 {
@@ -310,4 +322,16 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         *film = Arc::into_inner(film_arc).unwrap().into_inner().unwrap();
     }
 
+}
+
+#[test]
+fn test_coordinate_range() {
+    let mut cr = CoordinateRange(0..2, 0..3).iter();
+    assert_eq!(cr.next(), Some((0, 0)));
+    assert_eq!(cr.next(), Some((0, 1)));
+    assert_eq!(cr.next(), Some((0, 2)));
+    assert_eq!(cr.next(), Some((1, 0)));
+    assert_eq!(cr.next(), Some((1, 1)));
+    assert_eq!(cr.next(), Some((1, 2)));
+    assert_eq!(cr.next(), None);
 }
