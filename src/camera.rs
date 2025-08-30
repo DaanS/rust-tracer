@@ -38,7 +38,7 @@ impl Camera {
         Camera { cam_pos: from, pixel_center_upper_left, pixel_delta_u, pixel_delta_v, defocus_disk_u, defocus_disk_v }
     }
 
-    pub fn get_ray(&self, s: Float, t: Float) -> Ray {
+    pub fn ray(&self, s: Float, t: Float) -> Ray {
         let target = self.pixel_center_upper_left + s * self.pixel_delta_u + t * self.pixel_delta_v;
         let offset = random_vector_in_unit_disk();
         let pos = self.cam_pos + offset.x * self.defocus_disk_u + offset.y * self.defocus_disk_v;

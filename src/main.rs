@@ -20,9 +20,11 @@ mod sampler;
 mod window;
 mod conversion;
 
+use std::fs::create_dir_all;
+
 /// le current todos
 
-use crate::{config::{Film, Float}, film::SampleCollector, integrator::{Integrate, MultiCoreTiledIntegrator}, png::Png, ppm::Ppm, scene::random_scene};
+use crate::{config::{Film, Float}, film::SampleCollector, integrator::{Integrate, MultiCoreTiledIntegrator, SimpleRayEvaluator}, png::Png, ppm::Ppm, sampler::SquareSampler, scene::random_scene};
 
 fn variance_stats(film: &Film) {
     let mut vals: Vec<Float> = film.pix.iter().map(|sc| sc.avg_variance().r).collect();
@@ -41,13 +43,12 @@ fn main() {
     const HEIGHT: usize = 450;
     const MAX_SAMPLES: usize = 64;
 
-    type Sampler = sampler::SquareSampler;
-    type Evaluator = integrator::SimpleRayEvaluator;
+    create_dir_all("out/jobs").unwrap();
 
     let mut film = Film::new(WIDTH, HEIGHT);
 
     let scene = random_scene(&film);
-    MultiCoreTiledIntegrator::<Sampler, Evaluator, 50, 50, 8>::integrate(&scene, &mut film, 32, MAX_SAMPLES, 0.004);
+    MultiCoreTiledIntegrator::<SquareSampler, SimpleRayEvaluator, 50, 50, 8>::integrate(&scene, &mut film, 32, MAX_SAMPLES, 0.004);
 
     Ppm::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), "out/out.ppm");
 
