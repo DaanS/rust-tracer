@@ -52,7 +52,6 @@ fn print_progress(prog: Float) {
     stdout().flush().unwrap();
 }
 
-// TODO do we want to assume that sampler and evaluator carry state, and if so, what is the scope of that state (tile, thread, something else entirely)?
 pub trait Integrate {
     fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float);
 }
@@ -255,12 +254,9 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
             let sample_count = sample_count.clone();
             let film = film.clone();
             move || {
-                let mut win = MinifbWindow::new(width, height);
-                win.set_position(0, 0);
-                let mut win2 = MinifbWindow::new(width, height);
-                win2.set_position(width as isize, 0);
-                let mut win3 = MinifbWindow::new(width, height);
-                win3.set_position(width as isize, height as isize);
+                let mut win = MinifbWindow::positioned(width, height, 0, 0);
+                let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
+                let mut win3 = MinifbWindow::positioned(width, height, width as isize, height as isize);
 
                 while !queue.jobs.lock().unwrap().is_empty() {
                     let progress = *sample_count.lock().unwrap() as Float / total_samples as Float;

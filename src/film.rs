@@ -205,7 +205,6 @@ mod tests {
         sm.add_sample((0.0, 0.0, 1.0).into());
 
         let sm2 = sa.merged_with(&sb);
-        // TODO ulps
         assert_ulps_eq!(sm.mean(), sm2.mean());
         assert_ulps_eq!(sm.gamma_corrected_mean(), sm2.gamma_corrected_mean());
         assert_ulps_eq!(sm.variance(), sm2.variance());

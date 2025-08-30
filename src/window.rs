@@ -18,7 +18,13 @@ impl MinifbWindow {
         MinifbWindow { width, height, buffer: vec![0; width * height], window }
     }
 
-    pub fn set_position(&mut self, x: isize, y: isize) {
+    pub fn positioned(width: usize, height: usize, x: isize, y: isize) -> Self {
+        let mut window = MinifbWindow::new(width, height);
+        window.position(x, y);
+        window
+    }
+
+    pub fn position(&mut self, x: isize, y: isize) {
         self.window.set_position(x, y);
     }
 
