@@ -10,11 +10,11 @@ pub struct PresampledFilm {
 }
 
 impl PresampledFilm {
-    pub fn new(width: usize, height: usize, samples: usize) -> Self {
+    pub fn new((width, height): (usize, usize), samples: usize) -> Self {
         PresampledFilm{width, height, samples, pix: vec![Color::default(); width * height]}
     }
 
-    pub fn add_sample(&mut self, x: usize, y: usize, col: Color) {
+    pub fn add_sample(&mut self, (x, y): (usize, usize), col: Color) {
         self.pix[x + y * self.width] += col;
     }
 
@@ -95,15 +95,15 @@ pub struct SamplingFilm {
 }
 
 impl SamplingFilm {
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new((width, height): (usize, usize)) -> Self {
         SamplingFilm { width, height, pix: vec![SampleCollector::new(); width * height] }
     }
 
-    pub fn add_sample(&mut self, x: usize, y: usize, col: Color) {
+    pub fn add_sample(&mut self, (x, y): (usize, usize), col: Color) {
         self.pix[x + y * self.width].add_sample(col);
     }
 
-    pub fn overwrite_with(&mut self, top_left_x: usize, top_left_y: usize, other: &Self) {
+    pub fn overwrite_with(&mut self, (top_left_x, top_left_y): (usize, usize), other: &Self) {
         for x in top_left_x..(top_left_x + other.width).min(self.width) {
             for y in top_left_y..(top_left_y + other.height).min(self.height) {
                 self.pix[x + y * self.width] = other.pix[x - top_left_x + (y - top_left_y) * other.width];
@@ -111,7 +111,7 @@ impl SamplingFilm {
         }
     }
 
-    pub fn sample_collector(&self, x: usize, y: usize) -> &SampleCollector {
+    pub fn sample_collector(&self, (x, y): (usize, usize)) -> &SampleCollector {
         &self.pix[x + y * self.width]
     }
 
@@ -129,8 +129,8 @@ impl SamplingFilm {
 
 #[test]
 fn test_presampled() {
-    let mut f = PresampledFilm::new(2, 3, 1);
-    f.add_sample(0, 1, (0., 0.5, 1.).into());
+    let mut f = PresampledFilm::new((2, 3), 1);
+    f.add_sample((0, 1), (0., 0.5, 1.).into());
     let v = f.to_rgb8();
 
     assert_eq!(v.len(), f.width * f.height * 3);
@@ -215,8 +215,8 @@ mod tests {
     #[test]
     fn test_sampling() {
         // add single sample to film and get gamma corrected rgb8
-        let mut f = SamplingFilm::new(2, 3);
-        f.add_sample(0, 1, (0., 0.5, 1.).into());
+        let mut f = SamplingFilm::new((2, 3));
+        f.add_sample((0, 1), (0., 0.5, 1.).into());
         let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
 
         // check if sample was stored and mapped correctly
@@ -234,7 +234,7 @@ mod tests {
         }
 
         // add a second sample
-        f.add_sample(0, 1, (0., 0.5, 1.).into());
+        f.add_sample((0, 1), (0., 0.5, 1.).into());
         let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
 
         // check if output still matches
@@ -252,9 +252,9 @@ mod tests {
         }
 
         // add two different samples and check if they average out correctly
-        let mut f = SamplingFilm::new(1, 1);
-        f.add_sample(0, 0, (1., 0.5, 0.).into());
-        f.add_sample(0, 0, (0., 0.5, 1.).into());
+        let mut f = SamplingFilm::new((1, 1));
+        f.add_sample((0, 0), (1., 0.5, 0.).into());
+        f.add_sample((0, 0), (0., 0.5, 1.).into());
         let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
         assert_eq!(v.len(), 3);
         for c in 0..3 { 

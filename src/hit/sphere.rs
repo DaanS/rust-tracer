@@ -1,6 +1,6 @@
 
 use crate::{
-    config::Float, hit::{bvh::AABB, Bound, Hit, HitRecord}, material::Material, ray::Ray, vec3::{dot, Point}
+    config::Float, hit::{bvh::AABB, Bound, Hit, HitRecord}, material::simple::Material, ray::Ray, vec3::{dot, Point}
 };
 
 #[derive(Clone, Copy)]

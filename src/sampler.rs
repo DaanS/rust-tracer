@@ -1,13 +1,13 @@
 use crate::{config::Float, random::random_float};
 
 pub trait PixelSample: Default {
-    fn pixel_sample(&self, x: usize, y: usize) -> (Float, Float);
+    fn pixel_sample(&self, pixel: (usize, usize)) -> (Float, Float);
 }
 
 #[derive(Clone, Copy, Default)]
 pub struct CenterSampler {}
 impl PixelSample for CenterSampler {
-    fn pixel_sample(&self, x: usize, y: usize) -> (Float, Float) {
+    fn pixel_sample(&self, (x, y): (usize, usize)) -> (Float, Float) {
         (x as Float + 0.5, y as Float + 0.5)
     }
 }
@@ -15,7 +15,7 @@ impl PixelSample for CenterSampler {
 #[derive(Clone, Copy, Default)]
 pub struct SquareSampler{}
 impl PixelSample for SquareSampler {
-    fn pixel_sample(&self, x: usize, y: usize) -> (Float, Float) {
+    fn pixel_sample(&self, (x, y): (usize, usize)) -> (Float, Float) {
         (x as Float + random_float(), y as Float + random_float())
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{bvh::{AxisAlignedBound, Bvh}, sphere::sphere, Hit}, material::{dielectric, lambertian, metal}, random::{random_float, random_in_range}, ray::Ray, vec3::{vec3, Vec3}};
+use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{bvh::{AxisAlignedBound, Bvh}, sphere::sphere, Hit}, material::simple::{dielectric, lambertian, metal}, random::{random_float, random_in_range}, ray::Ray, vec3::{vec3, Vec3}};
 
 #[derive(Clone)]
 pub struct Scene {

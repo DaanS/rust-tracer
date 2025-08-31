@@ -18,8 +18,8 @@ impl RayEvaluator for SimpleRayEvaluator {
     fn li(&self, scene: &Scene, r: Ray, max_bounces: usize) -> Color {
         if max_bounces == 0 { return color_rgb(0., 0., 0.); }
 
-        match scene.objects.hit(r.clone(), 0.001, Float::INFINITY) {
-            Some(hit_record) => match hit_record.material.scatter(r, hit_record) {
+        match scene.objects.hit(r, 0.001, Float::INFINITY) {
+            Some(hit_record) => match hit_record.material.scatter(r, hit_record.pos, hit_record.normal) {
                 Some(scatter_record) => scatter_record.attenuation * self.li(scene, scatter_record.out, max_bounces - 1),
                 None => color_rgb(0., 0., 0.)
             },
@@ -73,11 +73,11 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator> Integrate for SimpleIntegrat
 
             for x in 0..film.width {
                 for y in 0..film.height {
-                    if n < min_samples || film.sample_collector(x, y).max_variance() > variance_target {
+                    if n < min_samples || film.sample_collector((x, y)).max_variance() > variance_target {
                         sample_count += 1;
-                        let (s, t) = sampler.pixel_sample(x, y);
-                        let r = scene.cam.ray(s, t);
-                        film.add_sample(x, y, evaluator.li(scene, r, 8));
+                        let (s, t) = sampler.pixel_sample((x, y));
+                        let r = scene.cam.ray((s, t));
+                        film.add_sample((x, y), evaluator.li(scene, r, 8));
                     }
                 }
                 print_progress((n * film.width * film.height + x * film.height) as Float / (film.width * film.height * max_samples) as Float);
@@ -108,12 +108,12 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         for y in 0..film.height {
             for x in 0..film.width {
                 for n in 0..max_samples {
-                    if n >= min_samples && film.sample_collector(x, y).max_variance() <= variance_target { break; }
+                    if n >= min_samples && film.sample_collector((x, y)).max_variance() <= variance_target { break; }
 
                     sample_count += 1;
-                    let (s, t) = sampler.pixel_sample(x + tile_x * film.width, y + tile_y * film.height);
-                    let r = scene.cam.ray(s, t);
-                    film.add_sample(x, y, evaluator.li(scene, r, 8));
+                    let (s, t) = sampler.pixel_sample((x + tile_x * film.width, y + tile_y * film.height));
+                    let r = scene.cam.ray((s, t));
+                    film.add_sample((x, y), evaluator.li(scene, r, 8));
                 }
             }
         }
@@ -133,9 +133,9 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
         for x in 0..tiles_hor {
             for y in 0..tiles_ver {
-                let mut tile_film = Film::new(TILE_WIDTH, TILE_HEIGHT);
+                let mut tile_film = Film::new((TILE_WIDTH, TILE_HEIGHT));
                 sample_count += Self::integrate_tile(scene, &mut tile_film, x, y, min_samples, max_samples, variance_target);
-                film.overwrite_with(x * TILE_WIDTH, y * TILE_HEIGHT, &tile_film);
+                film.overwrite_with((x * TILE_WIDTH, y * TILE_HEIGHT), &tile_film);
 
                 win.update(&film, SampleCollector::gamma_corrected_mean);
                 win2.update(&film, SampleCollector::variance);
@@ -244,25 +244,25 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
     fn render_tile(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
         let mut sample_count = 0;
-        let mut local_film = Film::new(tile_width, tile_height);
+        let mut local_film = Film::new((tile_width, tile_height));
         let sampler = Sampler::default();
         let evaluator = Evaluator::default();
 
         for y in 0..tile_height {
             for x in 0..tile_width {
                 for n in 0..max_samples {
-                    if n >= min_samples && local_film.sample_collector(x, y).max_variance() <= variance_target { break; }
+                    if n >= min_samples && local_film.sample_collector((x, y)).max_variance() <= variance_target { break; }
 
                     sample_count += 1;
-                    let (s, t) = sampler.pixel_sample(topleft_x + x, topleft_y + y);
-                    let r = scene.cam.ray(s, t);
-                    local_film.add_sample(x, y, evaluator.li(&scene, r, 8));
+                    let (s, t) = sampler.pixel_sample((topleft_x + x, topleft_y + y));
+                    let r = scene.cam.ray((s, t));
+                    local_film.add_sample((x, y), evaluator.li(&scene, r, 8));
                 }
             }
         }
 
         Png::write(tile_width, tile_height, local_film.to_rgb8(|s| color_gamma(s.mean())), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
-        film.lock().unwrap().overwrite_with(topleft_x, topleft_y, &local_film);
+        film.lock().unwrap().overwrite_with((topleft_x, topleft_y), &local_film);
         sample_count
     }   
 
@@ -314,7 +314,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         // TODO Arc and Mutex desire ownership, but we want the dispatch interface to not have to be thread-aware.
         // But this leads to excessive cloning here. Can we fix that?
 
-        let film_arc = Arc::new(Mutex::new(replace(film, Film::new(1, 1))));
+        let film_arc = Arc::new(Mutex::new(replace(film, Film::new((1, 1)))));
         let scene_arc = Arc::new(scene.clone());
 
         Self::integrate_inner(scene_arc, film_arc.clone(), min_samples, max_samples, variance_target);

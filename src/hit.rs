@@ -1,12 +1,9 @@
-use crate::config::Float;
-use crate::material::Material;
-use crate::ray::Ray;
-use crate::vec3::{Vec3, Point};
+use crate::{config::Float, material::simple::Material, ray::Ray, vec3::{Point, Vec3}};
 
 pub mod sphere;
 pub mod bvh;
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct HitRecord {
     pub t: Float,
     pub material: Material,

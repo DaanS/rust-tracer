@@ -45,7 +45,7 @@ fn main() {
 
     create_dir_all("out/jobs").unwrap();
 
-    let mut film = Film::new(WIDTH, HEIGHT);
+    let mut film = Film::new((WIDTH, HEIGHT));
 
     let scene = random_scene(&film);
     MultiCoreTiledIntegrator::<SquareSampler, SimpleRayEvaluator, 50, 50, 8>::integrate(&scene, &mut film, 32, MAX_SAMPLES, 0.004);

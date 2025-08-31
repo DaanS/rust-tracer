@@ -1,6 +1,6 @@
 use std::{fmt::Debug, mem::swap, ops::Index, sync::Arc};
 
-use crate::{config::Float, hit::{Bound, Hit, HitRecord}, material::Material, ray::Ray, util::Interval, vec3::Point};
+use crate::{config::Float, hit::{Bound, Hit, HitRecord}, material::simple::Material, ray::Ray, util::Interval, vec3::Point};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AABB {
