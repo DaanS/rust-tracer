@@ -214,13 +214,16 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         let height = film.lock().unwrap().height;
 
         let queue = Self::queue_jobs(scene, film.clone(), (width, height), min_samples, max_samples, variance_target);
+        let (tx, rx) = std::sync::mpsc::channel();
 
         let sample_count = Arc::new(Mutex::new(0));
-        let threads = Self::spawn_workers(queue.clone(), sample_count.clone());
-        let prog_thread = Self::spawn_progress_thread(queue.clone(), film.clone(), sample_count.clone(), (width, height), max_samples);
+        let threads = Self::spawn_workers(queue.clone(), sample_count.clone(), tx);
+        let render_thread = Self::spawn_render_thread(queue.clone(), film.clone(), (width, height));
+        let prog_thread = Self::spawn_prog_thread((width, height), max_samples, rx);
 
         println!("waiting for threads to finish...");
         for thread in threads { thread.join().unwrap(); }
+        render_thread.join().unwrap();
         prog_thread.join().unwrap();
         println!("threads finished");
 
@@ -237,7 +240,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         JobQueue::make_shared(CoordinateRange(0..tiles_hor, 0..tiles_ver).iter().map(|(x, y)| {
             let film = film.clone();
             let scene = scene.clone();
-            move |out: &mut dyn Write| 
+            move |out: &mut dyn Write|
                 Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
         }).collect())
     }
@@ -264,11 +267,12 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         Png::write(tile_width, tile_height, local_film.to_rgb8(|s| color_gamma(s.mean())), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
         film.lock().unwrap().overwrite_with((topleft_x, topleft_y), &local_film);
         sample_count
-    }   
+    }
 
-    fn spawn_workers(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, sample_count: Arc<Mutex<usize>>) -> Vec<std::thread::JoinHandle<()>> {
+    fn spawn_workers(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, sample_count: Arc<Mutex<usize>>, tx: std::sync::mpsc::Sender<usize>) -> Vec<std::thread::JoinHandle<()>> {
         (0..WORKER_COUNT).map(|i| {
             let queue = queue.clone();
+            let tx = tx.clone();
             let sample_count = sample_count.clone();
             std::thread::spawn(move || {
                 let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
@@ -276,26 +280,21 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                 while let Some(job) = queue.get_job() {
                     let local_sample_count = job(&mut out);
                     write!(out, "finished job with {local_sample_count} samples\n").unwrap();
-                    *sample_count.lock().unwrap() += local_sample_count;
+                    //*sample_count.lock().unwrap() += local_sample_count;
+                    tx.send(local_sample_count).unwrap();
                 }
                 write!(out, "thread {i} done\n").unwrap();
             })
         }).collect()
     }
 
-    fn spawn_progress_thread(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, film: Arc<Mutex<Film>>, sample_count: Arc<Mutex<usize>>, (width, height): (usize, usize), max_samples: usize) -> std::thread::JoinHandle<()> {
+    fn spawn_render_thread(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, film: Arc<Mutex<Film>>, (width, height): (usize, usize)) -> std::thread::JoinHandle<()> {
         std::thread::spawn(move || {
             let mut win = MinifbWindow::positioned(width, height, 0, 0);
             let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
             let mut win3 = MinifbWindow::positioned(width, height, width as isize, height as isize);
-            let total_samples = width * height * max_samples;
 
             while !queue.is_empty() {
-                {
-                    let progress = *sample_count.lock().unwrap() as Float / total_samples as Float;
-                    print_progress(progress);
-                }
-
                 {
                     let film = film.lock().unwrap();
                     win.update(&film, SampleCollector::gamma_corrected_mean);
@@ -304,6 +303,23 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                 }
 
                 std::thread::sleep(std::time::Duration::from_millis(1000));
+            }
+        })
+    }
+
+    fn spawn_prog_thread((width, height): (usize, usize), max_samples: usize, rx: std::sync::mpsc::Receiver<usize>) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            let total_jobs = (width / TILE_WIDTH + 1.min(width % TILE_WIDTH)) * (height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT));
+            let total_samples = width * height * max_samples;
+            let mut completed_jobs = 0;
+            let mut completed_samples = 0;
+
+            while completed_jobs < total_jobs {
+                if let Ok(samples) = rx.recv() {
+                    completed_jobs += 1;
+                    completed_samples += samples;
+                    print_progress(completed_samples as Float / total_samples as Float);
+                }
             }
         })
     }
