@@ -1,4 +1,4 @@
-use std::{fs::File, io::{stdout, Write}, mem::replace, sync::{Arc, Mutex}};
+use std::{fs::File, io::{stdout, Write}, mem::replace, sync::{mpsc::{Receiver, Sender}, Arc, Mutex}, thread::JoinHandle};
 
 use crate::{
     color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::PixelSample, scene::Scene, util::is_power_of_2, window::MinifbWindow,
@@ -213,17 +213,15 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         let width = film.lock().unwrap().width;
         let height = film.lock().unwrap().height;
 
-        let queue = Self::queue_jobs(scene, film.clone(), (width, height), min_samples, max_samples, variance_target);
+        let queue = Self::queue_jobs(scene, (width, height), min_samples, max_samples, variance_target);
         let (tx, rx) = std::sync::mpsc::channel();
 
         let sample_count = Arc::new(Mutex::new(0));
-        let threads = Self::spawn_workers(queue.clone(), sample_count.clone(), tx);
-        let render_thread = Self::spawn_render_thread(queue.clone(), film.clone(), (width, height));
-        let prog_thread = Self::spawn_prog_thread((width, height), max_samples, rx);
+        let threads = Self::spawn_workers(queue.clone(), tx);
+        let prog_thread = Self::spawn_prog_thread(film.clone(), (width, height), max_samples, rx);
 
         println!("waiting for threads to finish...");
         for thread in threads { thread.join().unwrap(); }
-        render_thread.join().unwrap();
         prog_thread.join().unwrap();
         println!("threads finished");
 
@@ -233,19 +231,18 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (width * height * max_samples) as Float);
     }
 
-    fn queue_jobs(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (width, height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float) -> Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>> {
+    fn queue_jobs(scene: Arc<Scene>, (width, height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float) -> Arc<JobQueue<impl FnOnce(&mut dyn Write) -> (usize, Film, (usize, usize)) + Send + 'static>> {
         let tiles_hor = width / TILE_WIDTH + 1.min(width % TILE_WIDTH);
         let tiles_ver = height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT);
 
         JobQueue::make_shared(CoordinateRange(0..tiles_hor, 0..tiles_ver).iter().map(|(x, y)| {
-            let film = film.clone();
             let scene = scene.clone();
             move |out: &mut dyn Write|
-                Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
+                Self::render_tile(scene, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
         }).collect())
     }
 
-    fn render_tile(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
+    fn render_tile(scene: Arc<Scene>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> (usize, Film, (usize, usize)) {
         let mut sample_count = 0;
         let mut local_film = Film::new((tile_width, tile_height));
         let sampler = Sampler::default();
@@ -265,60 +262,47 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         }
 
         Png::write(tile_width, tile_height, local_film.to_rgb8(|s| color_gamma(s.mean())), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
-        film.lock().unwrap().overwrite_with((topleft_x, topleft_y), &local_film);
-        sample_count
+        (sample_count, local_film, (topleft_x, topleft_y))
     }
 
-    fn spawn_workers(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, sample_count: Arc<Mutex<usize>>, tx: std::sync::mpsc::Sender<usize>) -> Vec<std::thread::JoinHandle<()>> {
+    fn spawn_workers(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> (usize, Film, (usize, usize)) + Send + 'static>>, tx: Sender<(usize, Film, (usize, usize))>) -> Vec<JoinHandle<()>> {
         (0..WORKER_COUNT).map(|i| {
             let queue = queue.clone();
             let tx = tx.clone();
-            let sample_count = sample_count.clone();
             std::thread::spawn(move || {
                 let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
                 write!(out, "thread {i} reporting\n").unwrap();
                 while let Some(job) = queue.get_job() {
-                    let local_sample_count = job(&mut out);
+                    let (local_sample_count, local_film, (topleft_x, topleft_y)) = job(&mut out);
                     write!(out, "finished job with {local_sample_count} samples\n").unwrap();
-                    //*sample_count.lock().unwrap() += local_sample_count;
-                    tx.send(local_sample_count).unwrap();
+                    tx.send((local_sample_count, local_film, (topleft_x, topleft_y))).unwrap();
                 }
                 write!(out, "thread {i} done\n").unwrap();
             })
         }).collect()
     }
 
-    fn spawn_render_thread(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, film: Arc<Mutex<Film>>, (width, height): (usize, usize)) -> std::thread::JoinHandle<()> {
-        std::thread::spawn(move || {
-            let mut win = MinifbWindow::positioned(width, height, 0, 0);
-            let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
-            let mut win3 = MinifbWindow::positioned(width, height, width as isize, height as isize);
-
-            while !queue.is_empty() {
-                {
-                    let film = film.lock().unwrap();
-                    win.update(&film, SampleCollector::gamma_corrected_mean);
-                    win2.update(&film, SampleCollector::variance);
-                    win3.update(&film, SampleCollector::avg_variance);
-                }
-
-                std::thread::sleep(std::time::Duration::from_millis(1000));
-            }
-        })
-    }
-
-    fn spawn_prog_thread((width, height): (usize, usize), max_samples: usize, rx: std::sync::mpsc::Receiver<usize>) -> std::thread::JoinHandle<()> {
+    fn spawn_prog_thread(film: Arc<Mutex<Film>>, (width, height): (usize, usize), max_samples: usize, rx: Receiver<(usize, Film, (usize, usize))>) -> JoinHandle<()> {
         std::thread::spawn(move || {
             let total_jobs = (width / TILE_WIDTH + 1.min(width % TILE_WIDTH)) * (height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT));
             let total_samples = width * height * max_samples;
             let mut completed_jobs = 0;
             let mut completed_samples = 0;
+            let mut win = MinifbWindow::positioned(width, height, 0, 0);
+            let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
+            let mut win3 = MinifbWindow::positioned(width, height, width as isize, height as isize);
 
             while completed_jobs < total_jobs {
-                if let Ok(samples) = rx.recv() {
+                if let Ok((samples, local_film, (topleft_x, topleft_y))) = rx.recv() {
                     completed_jobs += 1;
                     completed_samples += samples;
                     print_progress(completed_samples as Float / total_samples as Float);
+
+                    let mut film = film.lock().unwrap();
+                    film.overwrite_with((topleft_x, topleft_y), &local_film);
+                    win.update(&film, SampleCollector::gamma_corrected_mean);
+                    win2.update(&film, SampleCollector::variance);
+                    win3.update(&film, SampleCollector::avg_variance);
                 }
             }
         })
