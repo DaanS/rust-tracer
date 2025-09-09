@@ -209,9 +209,9 @@ pub struct MultiCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluato
 }
 
 impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> MultiCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
-    pub fn integrate_inner(scene: Arc<Scene>, film: Arc<Mutex<Film>>, min_samples: usize, max_samples: usize, variance_target: Float) {
-        let width = film.lock().unwrap().width;
-        let height = film.lock().unwrap().height;
+    pub fn integrate_inner(scene: Arc<Scene>, film: Arc<Film>, min_samples: usize, max_samples: usize, variance_target: Float) {
+        let width = film.width;
+        let height = film.height;
 
         let queue = Self::queue_jobs(scene, film.clone(), (width, height), min_samples, max_samples, variance_target);
 
@@ -230,7 +230,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (width * height * max_samples) as Float);
     }
 
-    fn queue_jobs(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (width, height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float) -> Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>> {
+    fn queue_jobs(scene: Arc<Scene>, film: Arc<Film>, (width, height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float) -> Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>> {
         let tiles_hor = width / TILE_WIDTH + 1.min(width % TILE_WIDTH);
         let tiles_ver = height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT);
 
@@ -242,9 +242,9 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         }).collect())
     }
 
-    fn render_tile(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
+    fn render_tile(scene: Arc<Scene>, film: Arc<Film>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
         let mut sample_count = 0;
-        let mut local_film = Film::new((tile_width, tile_height));
+        let local_film = Film::new((tile_width, tile_height));
         let sampler = Sampler::default();
         let evaluator = Evaluator::default();
 
@@ -262,7 +262,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         }
 
         Png::write(tile_width, tile_height, local_film.to_rgb8(|s| color_gamma(s.mean())), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
-        film.lock().unwrap().overwrite_with((topleft_x, topleft_y), &local_film);
+        film.overwrite_with((topleft_x, topleft_y), &local_film);
         sample_count
     }   
 
@@ -283,7 +283,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         }).collect()
     }
 
-    fn spawn_progress_thread(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, film: Arc<Mutex<Film>>, sample_count: Arc<Mutex<usize>>, (width, height): (usize, usize), max_samples: usize) -> std::thread::JoinHandle<()> {
+    fn spawn_progress_thread(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, film: Arc<Film>, sample_count: Arc<Mutex<usize>>, (width, height): (usize, usize), max_samples: usize) -> std::thread::JoinHandle<()> {
         std::thread::spawn(move || {
             let mut win = MinifbWindow::positioned(width, height, 0, 0);
             let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
@@ -296,12 +296,9 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                     print_progress(progress);
                 }
 
-                {
-                    let film = film.lock().unwrap();
-                    win.update(&film, SampleCollector::gamma_corrected_mean);
-                    win2.update(&film, SampleCollector::variance);
-                    win3.update(&film, SampleCollector::avg_variance);
-                }
+                win.update(&film, SampleCollector::gamma_corrected_mean);
+                win2.update(&film, SampleCollector::variance);
+                win3.update(&film, SampleCollector::avg_variance);
 
                 std::thread::sleep(std::time::Duration::from_millis(1000));
             }
@@ -314,12 +311,12 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         // TODO Arc and Mutex desire ownership, but we want the dispatch interface to not have to be thread-aware.
         // But this leads to excessive cloning here. Can we fix that?
 
-        let film_arc = Arc::new(Mutex::new(replace(film, Film::new((1, 1)))));
+        let film_arc = Arc::new(replace(film, Film::new((1, 1))));
         let scene_arc = Arc::new(scene.clone());
 
         Self::integrate_inner(scene_arc, film_arc.clone(), min_samples, max_samples, variance_target);
 
-        *film = Arc::into_inner(film_arc).unwrap().into_inner().unwrap();
+        *film = Arc::into_inner(film_arc).unwrap();
     }
 
 }

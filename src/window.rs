@@ -29,7 +29,7 @@ impl MinifbWindow {
     }
 
     pub fn update<ExtractFunc: Fn(&SampleCollector) -> Color>(& mut self, film: &Film, f: ExtractFunc) {
-        for (idx, pixel) in film.pix.iter().enumerate() {
+        for (idx, pixel) in film.pix_iter().enumerate() {
             self.buffer[idx] = color_to_u32(f(pixel));
         }
         self.window.update_with_buffer(&self.buffer, self.width, self.height).unwrap();

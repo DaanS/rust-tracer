@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![feature(sync_unsafe_cell)]
 
 #[macro_use]
 mod vec3;
@@ -27,7 +28,7 @@ use std::fs::create_dir_all;
 use crate::{config::{Film, Float}, film::SampleCollector, integrator::{Integrate, MultiCoreTiledIntegrator, SimpleRayEvaluator}, png::Png, ppm::Ppm, sampler::SquareSampler, scene::random_scene};
 
 fn variance_stats(film: &Film) {
-    let mut vals: Vec<Float> = film.pix.iter().map(|sc| sc.avg_variance().r).collect();
+    let mut vals: Vec<Float> = film.pix_iter().map(|sc| sc.avg_variance().r).collect();
     vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
     println!("");

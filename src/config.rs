@@ -1,7 +1,7 @@
-use crate::{color::ColorRgb, film::SamplingFilm};
+use crate::{color::ColorRgb, film::{SamplingFilm, UnsafeSamplingFilm}};
 
 pub type Float = f64;
 pub type Color = ColorRgb;
-pub type Film = SamplingFilm;
+pub type Film = UnsafeSamplingFilm;
 
 pub const PI: f64 = std::f64::consts::PI;

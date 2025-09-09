@@ -1,3 +1,5 @@
+use std::cell::SyncUnsafeCell;
+
 use crate::color::{color_rgb};
 use crate::config::{Color, Float};
 use crate::conversion::{color_component_to_u8, color_gamma, map_color_component};
@@ -118,6 +120,58 @@ impl SamplingFilm {
     pub fn to_rgb8<ExtractFunc: Fn(&SampleCollector) -> Color>(&self, extract: ExtractFunc) -> Vec<u8> {
         let mut v = vec![0; self.width * self.height * 3];
         for (i, sc) in self.pix.iter().enumerate() {
+            let c = extract(sc);
+            v[i * 3] = color_component_to_u8(c.r);
+            v[i * 3 + 1] = color_component_to_u8(c.g);
+            v[i * 3 + 2] = color_component_to_u8(c.b);
+        }
+        v
+    }
+}
+
+pub struct UnsafeSamplingFilm {
+    pub width: usize,
+    pub height: usize,
+    pub pix: SyncUnsafeCell<Vec<SampleCollector>>
+}
+
+impl UnsafeSamplingFilm {
+    pub fn new((width, height): (usize, usize)) -> Self {
+        UnsafeSamplingFilm { width, height, pix: SyncUnsafeCell::new(vec![SampleCollector::new(); width * height]) }
+    }
+
+    pub fn add_sample(&self, (x, y): (usize, usize), col: Color) {
+        unsafe {
+            (&mut *self.pix.get()).get_unchecked_mut(x + y * self.width).add_sample(col);
+        }
+    }
+
+    pub fn overwrite_with(&self, (top_left_x, top_left_y): (usize, usize), other: &Self) {
+        for x in top_left_x..(top_left_x + other.width).min(self.width) {
+            for y in top_left_y..(top_left_y + other.height).min(self.height) {
+                unsafe {
+                    *(&mut *self.pix.get()).get_unchecked_mut(x + y * self.width) = 
+                        (&*other.pix.get()).get_unchecked(x - top_left_x + (y - top_left_y) * other.width).clone();
+                }
+            }
+        }
+    }
+
+    pub fn sample_collector(&self, (x, y): (usize, usize)) -> &SampleCollector {
+        unsafe {
+            (&*self.pix.get()).get_unchecked(x + y * self.width)
+        }
+    }
+
+    pub fn pix_iter(&self) -> std::slice::Iter<SampleCollector> {
+        unsafe {
+            (&*self.pix.get()).iter()
+        }
+    }
+
+    pub fn to_rgb8<ExtractFunc: Fn(&SampleCollector) -> Color>(&self, extract: ExtractFunc) -> Vec<u8> {
+        let mut v = vec![0; self.width * self.height * 3];
+        for (i, sc) in self.pix_iter().enumerate() {
             let c = extract(sc);
             v[i * 3] = color_component_to_u8(c.r);
             v[i * 3 + 1] = color_component_to_u8(c.g);
@@ -253,6 +307,56 @@ mod tests {
 
         // add two different samples and check if they average out correctly
         let mut f = SamplingFilm::new((1, 1));
+        f.add_sample((0, 0), (1., 0.5, 0.).into());
+        f.add_sample((0, 0), (0., 0.5, 1.).into());
+        let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
+        assert_eq!(v.len(), 3);
+        for c in 0..3 { 
+            assert_eq!(v[c], map_color_component(0.5));
+        }
+    }
+
+    #[test]
+    fn test_unsafe_sampling() {
+        // add single sample to film and get gamma corrected rgb8
+        let f = UnsafeSamplingFilm::new((2, 3));
+        f.add_sample((0, 1), (0., 0.5, 1.).into());
+        let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
+
+        // check if sample was stored and mapped correctly
+        assert_eq!(v.len(), f.width * f.height * 3);
+        for x in 0..f.width {
+            for y in 0..f.height {
+                for c in 0..3 {
+                    assert_eq!(v[(x + y * f.width) * 3 + c], 
+                        if x == 0 && y == 1 && c == 1 { map_color_component(0.5) }
+                        else if x == 0 && y == 1 && c == 2 { 255 }
+                        else { 0 }
+                    );
+                }
+            }
+        }
+
+        // add a second sample
+        f.add_sample((0, 1), (0., 0.5, 1.).into());
+        let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
+
+        // check if output still matches
+        assert_eq!(v.len(), f.width * f.height * 3);
+        for x in 0..f.width {
+            for y in 0..f.height {
+                for c in 0..3 {
+                    assert_eq!(v[(x + y * f.width) * 3 + c], 
+                        if x == 0 && y == 1 && c == 1 { map_color_component(0.5) }
+                        else if x == 0 && y == 1 && c == 2 { 255 }
+                        else { 0 }
+                    );
+                }
+            }
+        }
+
+        // add two different samples and check if they average out correctly
+        let f = UnsafeSamplingFilm::new((1, 1));
         f.add_sample((0, 0), (1., 0.5, 0.).into());
         f.add_sample((0, 0), (0., 0.5, 1.).into());
         let v = f.to_rgb8(SampleCollector::gamma_corrected_mean);
