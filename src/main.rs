@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#![feature(sync_unsafe_cell)]
 
 #[macro_use]
 mod vec3;

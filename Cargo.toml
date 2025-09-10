@@ -12,6 +12,7 @@ image = "0.24.7"
 minifb = "0.25.0"
 rand = "0.8.5"
 rand_xoshiro = "0.6.0"
+sync-unsafe-cell = "0.1.1"
 
 [[bin]]
 name = "main"

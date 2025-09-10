@@ -1,4 +1,4 @@
-use std::cell::SyncUnsafeCell;
+use sync_unsafe_cell::SyncUnsafeCell;
 
 use crate::color::{color_rgb};
 use crate::config::{Color, Float};
@@ -157,9 +157,9 @@ impl UnsafeSamplingFilm {
         }
     }
 
-    pub fn sample_collector(&self, (x, y): (usize, usize)) -> &SampleCollector {
+    pub fn sample_collector(&self, (x, y): (usize, usize)) -> &mut SampleCollector {
         unsafe {
-            (&*self.pix.get()).get_unchecked(x + y * self.width)
+            (&mut *self.pix.get()).get_unchecked_mut(x + y * self.width)
         }
     }
 

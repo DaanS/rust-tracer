@@ -250,19 +250,19 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
         for y in 0..tile_height {
             for x in 0..tile_width {
+                let sample_collector = &mut film.sample_collector((x + topleft_x, y + topleft_y));
                 for n in 0..max_samples {
-                    if n >= min_samples && local_film.sample_collector((x, y)).max_variance() <= variance_target { break; }
+                    if n >= min_samples && sample_collector.max_variance() <= variance_target { break; }
 
                     sample_count += 1;
                     let (s, t) = sampler.pixel_sample((topleft_x + x, topleft_y + y));
                     let r = scene.cam.ray((s, t));
-                    local_film.add_sample((x, y), evaluator.li(&scene, r, 8));
+                    sample_collector.add_sample(evaluator.li(&scene, r, 8));
                 }
             }
         }
 
         Png::write(tile_width, tile_height, local_film.to_rgb8(|s| color_gamma(s.mean())), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
-        film.overwrite_with((topleft_x, topleft_y), &local_film);
         sample_count
     }   
 
@@ -300,7 +300,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                 win2.update(&film, SampleCollector::variance);
                 win3.update(&film, SampleCollector::avg_variance);
 
-                std::thread::sleep(std::time::Duration::from_millis(1000));
+                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         })
     }
