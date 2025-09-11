@@ -1,12 +1,13 @@
-use crate::{config::Float, material::simple::Material, ray::Ray, vec3::{Point, Vec3}};
+use std::{rc::Rc, sync::Arc};
+
+use crate::{config::Float, material::{simple::Material, Scatter}, ray::Ray, vec3::{Point, Vec3}};
 
 pub mod sphere;
 pub mod bvh;
 
-#[derive(PartialEq, Debug)]
 pub struct HitRecord {
     pub t: Float,
-    pub material: Material,
+    pub material: Arc<dyn Scatter>,
     pub normal: Vec3,
     pub pos: Point
 }

@@ -62,12 +62,14 @@ impl Scatter for Material {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::{color::color_rgb, hit::{sphere::sphere, Hit}, material::{simple::{dielectric, metal, Material}, Scatter}, ray::Ray, vec3::dot};
 
     #[test]
     fn test_scatter_anti_normal() {
         let color = color_rgb(0.8, 0.6, 0.4);
-        let mut s = sphere((0., 0., 0.), 0.5, Material::Lambertian { color });
+        let mut s = sphere((0., 0., 0.), 0.5, Arc::new(Material::Lambertian { color }));
         let r = ray!((-1, 0, 0) -> (1, 0, 0));
         let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
 
@@ -76,13 +78,13 @@ mod tests {
         assert!(dot(h.normal, scatter_rec.out.direction) > 0.);
         assert_eq!(scatter_rec.out.origin, h.pos);
 
-        s.material = metal((0.8, 0.6, 0.4), 0.);
+        s.material = Arc::new(metal((0.8, 0.6, 0.4), 0.));
         let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
         assert_eq!(scatter_rec.attenuation, (0.8, 0.6, 0.4).into());
         assert_eq!(scatter_rec.out.direction, -r.direction);
         assert_eq!(scatter_rec.out.origin, h.pos);
 
-        s.material = dielectric(1.);
+        s.material = Arc::new(dielectric(1.));
         let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
         assert_eq!(scatter_rec.attenuation, (1., 1., 1.).into());
         assert_eq!(scatter_rec.out.direction, r.direction);
@@ -91,7 +93,7 @@ mod tests {
 
     #[test]
     fn test_refraction() {
-        let s = sphere((0., 0., 0.), 0.5, dielectric(1.3));
+        let s = sphere((0., 0., 0.), 0.5, Arc::new(dielectric(1.3)));
 
         let r = ray!((-1, 0, 0) -> (1, 0, 0));
         let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();

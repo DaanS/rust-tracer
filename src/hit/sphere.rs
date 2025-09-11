@@ -1,17 +1,19 @@
 
+use std::{rc::Rc, sync::Arc};
+
 use crate::{
     config::Float, hit::{bvh::AABB, Bound, Hit, HitRecord}, material::simple::Material, ray::Ray, vec3::{dot, Point}
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Sphere {
     pub center: Point,
     pub radius: Float,
-    pub material: Material,
+    pub material: Arc<Material>,
 }
 
-pub fn sphere(center: (Float, Float, Float), radius: Float, material: Material) -> Sphere { 
-    Sphere { center: center.into(), radius, material } 
+pub fn sphere(center: (Float, Float, Float), radius: Float, material: Arc<Material>) -> Sphere {
+    Sphere { center: center.into(), radius, material }
 }
 
 impl Hit for Sphere {
@@ -36,7 +38,7 @@ impl Hit for Sphere {
         let pos = r.at(root);
         let normal = (pos - self.center) / self.radius;
 
-        Some(HitRecord { t: root, material: self.material, normal, pos }) 
+        Some(HitRecord { t: root, material: self.material.clone(), normal, pos }) 
     }
 }
 
@@ -87,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_hit_sphere() {
-        let s = sphere((0., 0., 0.), 1., Material::None);
+        let s = sphere((0., 0., 0.), 1., Arc::new(Material::None));
 
         assert!(s.hit(ray!((-10, 0, 0) -> (1., 0., 0.)), 0., f64::INFINITY).is_some());
 
@@ -102,7 +104,7 @@ mod tests {
 
     #[test]
     fn test_bound_sphere() {
-        let s = sphere((0., 0., 0.), 1., Material::None);
+        let s = sphere((0., 0., 0.), 1., Arc::new(Material::None));
         let aabb = s.bound();
 
         assert_ulps_eq!(aabb.x.min, -1.);
@@ -115,8 +117,8 @@ mod tests {
 
     #[test]
     fn test_hit_vec() {
-        let s1 = sphere((1., 0., 0.), 1., Material::None);
-        let s2 = sphere((-1., 0., 0.), 1., Material::None);
+        let s1 = sphere((1., 0., 0.), 1., Arc::new(Material::None));
+        let s2 = sphere((-1., 0., 0.), 1., Arc::new(Material::None));
         let v = vec![s1, s2];
 
         assert_eq!(v.hit(ray!((3, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().t, 1.);
@@ -125,8 +127,8 @@ mod tests {
 
     #[test]
     fn test_bound_vec() {
-        let s1 = sphere((1., 0., 0.), 1., Material::None);
-        let s2 = sphere((-1., 0., 0.), 1., Material::None);
+        let s1 = sphere((1., 0., 0.), 1., Arc::new(Material::None));
+        let s2 = sphere((-1., 0., 0.), 1., Arc::new(Material::None));
 
         let v = vec![s1, s2];
         let aabb = v.bound();
