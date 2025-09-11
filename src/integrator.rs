@@ -1,4 +1,4 @@
-use std::{fs::File, io::{stdout, Write}, mem::replace, sync::{Arc, Mutex}};
+use std::{fs::File, io::{stdout, Write}, mem::replace, sync::{Arc, Mutex}, thread::Scope};
 
 use crate::{
     color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::PixelSample, scene::Scene, util::is_power_of_2, window::MinifbWindow,
@@ -150,24 +150,25 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
     }
 }
 
-struct JobQueue<T> {
-    jobs: Mutex<Vec<T>>
+struct JobQueue<'a, F: Send + 'a> {
+    jobs: Mutex<Vec<F>>,
+    __marker: std::marker::PhantomData<&'a ()>,
 }
 
-impl<T> JobQueue<T> {
-    fn new(jobs: Vec<T>) -> Self {
-        JobQueue{jobs: Mutex::new(jobs)}
+impl<'a, F: Send + 'a> JobQueue<'a, F> {
+    fn new(jobs: Vec<F>) -> Self {
+        JobQueue{jobs: Mutex::new(jobs), __marker: std::marker::PhantomData}
     }
 
-    fn make_shared(jobs: Vec<T>) -> Arc<Self> {
+    fn make_shared(jobs: Vec<F>) -> Arc<Self> {
         Arc::new(JobQueue::new(jobs))
     }
 
-    fn add_job(&self, job: T) {
+    fn add_job(&self, job: F) {
         self.jobs.lock().unwrap().push(job);
     }
 
-    fn get_job(&self) -> Option<T> {
+    fn get_job(&self) -> Option<F> {
         self.jobs.lock().unwrap().pop()
     }
 
@@ -209,20 +210,17 @@ pub struct MultiCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluato
 }
 
 impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> MultiCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
-    pub fn integrate_inner(scene: Arc<Scene>, film: Arc<Mutex<Film>>, min_samples: usize, max_samples: usize, variance_target: Float) {
+    pub fn integrate_inner(scene: &Scene, film: Arc<Mutex<Film>>, min_samples: usize, max_samples: usize, variance_target: Float) {
         let width = film.lock().unwrap().width;
         let height = film.lock().unwrap().height;
 
         let queue = Self::queue_jobs(scene, film.clone(), (width, height), min_samples, max_samples, variance_target);
 
-        let sample_count = Arc::new(Mutex::new(0));
-        let threads = Self::spawn_workers(queue.clone(), sample_count.clone());
-        let prog_thread = Self::spawn_progress_thread(queue.clone(), film.clone(), sample_count.clone(), (width, height), max_samples);
-
-        println!("waiting for threads to finish...");
-        for thread in threads { thread.join().unwrap(); }
-        prog_thread.join().unwrap();
-        println!("threads finished");
+        let sample_count = Mutex::new(0);
+        std::thread::scope(|scope| {
+            Self::spawn_workers(scope, &queue, &sample_count);
+            Self::spawn_progress_thread(scope, &queue, film.clone(), &sample_count, (width, height), max_samples);
+        });
 
         let sample_count = *sample_count.lock().unwrap();
 
@@ -230,19 +228,18 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (width * height * max_samples) as Float);
     }
 
-    fn queue_jobs(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (width, height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float) -> Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>> {
+    fn queue_jobs<'scene>(scene: &'scene Scene, film: Arc<Mutex<Film>>, (width, height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float) -> JobQueue<'scene, impl FnOnce(&mut dyn Write) -> usize + Send + 'scene> {
         let tiles_hor = width / TILE_WIDTH + 1.min(width % TILE_WIDTH);
         let tiles_ver = height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT);
 
-        JobQueue::make_shared(CoordinateRange(0..tiles_hor, 0..tiles_ver).iter().map(|(x, y)| {
+        JobQueue::new(CoordinateRange(0..tiles_hor, 0..tiles_ver).iter().map(|(x, y)| {
             let film = film.clone();
-            let scene = scene.clone();
             move |out: &mut dyn Write| 
                 Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
         }).collect())
     }
 
-    fn render_tile(scene: Arc<Scene>, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
+    fn render_tile(scene: &Scene, film: Arc<Mutex<Film>>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
         let mut sample_count = 0;
         let mut local_film = Film::new((tile_width, tile_height));
         let sampler = Sampler::default();
@@ -266,11 +263,9 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         sample_count
     }   
 
-    fn spawn_workers(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, sample_count: Arc<Mutex<usize>>) -> Vec<std::thread::JoinHandle<()>> {
-        (0..WORKER_COUNT).map(|i| {
-            let queue = queue.clone();
-            let sample_count = sample_count.clone();
-            std::thread::spawn(move || {
+    fn spawn_workers<'scope, 'env>(scope: &'scope Scope<'scope, 'env>, queue: &'scope JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'scope>, sample_count: &'scope Mutex<usize>) {
+        for i in 0..WORKER_COUNT {
+            scope.spawn(move || {
                 let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
                 write!(out, "thread {i} reporting\n").unwrap();
                 while let Some(job) = queue.get_job() {
@@ -279,12 +274,12 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                     *sample_count.lock().unwrap() += local_sample_count;
                 }
                 write!(out, "thread {i} done\n").unwrap();
-            })
-        }).collect()
+            });
+        };
     }
 
-    fn spawn_progress_thread(queue: Arc<JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'static>>, film: Arc<Mutex<Film>>, sample_count: Arc<Mutex<usize>>, (width, height): (usize, usize), max_samples: usize) -> std::thread::JoinHandle<()> {
-        std::thread::spawn(move || {
+    fn spawn_progress_thread<'scope, 'env>(scope: &'scope Scope<'scope, 'env>, queue: &'scope JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'scope>, film: Arc<Mutex<Film>>, sample_count: &'scope Mutex<usize>, (width, height): (usize, usize), max_samples: usize) {
+        scope.spawn(move || {
             let mut win = MinifbWindow::positioned(width, height, 0, 0);
             let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
             let mut win3 = MinifbWindow::positioned(width, height, width as isize, height as isize);
@@ -305,7 +300,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
                 std::thread::sleep(std::time::Duration::from_millis(1000));
             }
-        })
+        });
     }
 }
 
@@ -315,9 +310,8 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         // But this leads to excessive cloning here. Can we fix that?
 
         let film_arc = Arc::new(Mutex::new(replace(film, Film::new((1, 1)))));
-        let scene_arc = Arc::new(scene.clone());
 
-        Self::integrate_inner(scene_arc, film_arc.clone(), min_samples, max_samples, variance_target);
+        Self::integrate_inner(scene, film_arc.clone(), min_samples, max_samples, variance_target);
 
         *film = Arc::into_inner(film_arc).unwrap().into_inner().unwrap();
     }
