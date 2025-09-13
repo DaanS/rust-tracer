@@ -20,7 +20,7 @@ mod sampler;
 mod window;
 mod conversion;
 
-use std::fs::create_dir_all;
+use std::{fs::create_dir_all, time::Instant};
 
 /// le current todos
 
@@ -39,6 +39,8 @@ fn variance_stats(film: &Film) {
 }
 
 fn main() {
+    let start = Instant::now();
+
     const WIDTH: usize = 800;
     const HEIGHT: usize = 450;
     const MAX_SAMPLES: usize = 64;
@@ -46,9 +48,15 @@ fn main() {
     create_dir_all("out/jobs").unwrap();
 
     let mut film = Film::new((WIDTH, HEIGHT));
-
     let scene = random_scene(&film);
+
+    let init_dur = start.elapsed();
+    let render_start = Instant::now();
+
     MultiCoreTiledIntegrator::<SquareSampler, SimpleRayEvaluator, 50, 50, 8>::integrate(&scene, &mut film, 32, MAX_SAMPLES, 0.004);
+
+    let render_dur = render_start.elapsed();
+    let post_start = Instant::now();
 
     Ppm::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), "out/out.ppm");
 
@@ -58,4 +66,10 @@ fn main() {
     Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::avg_variance), &format!("{}-avg-variance.png", base_path));
 
     variance_stats(&film);
+
+    println!("");
+    println!("Initialization took: {:?}", init_dur);
+    println!("Rendering took: {:?}", render_dur);
+    println!("Post took: {:?}", post_start.elapsed());
+    println!("Everything took: {:?}", start.elapsed());
 }

@@ -3,7 +3,7 @@ use crate::{
     config::Float, hit::{bvh::AABB, Bound, Hit, HitRecord}, material::simple::Material, ray::Ray, vec3::{dot, Point}
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Sphere {
     pub center: Point,
     pub radius: Float,

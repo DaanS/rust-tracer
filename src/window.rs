@@ -14,7 +14,7 @@ pub struct MinifbWindow {
 impl MinifbWindow {
     pub fn new(width: usize, height: usize) -> Self {
         let mut window = Window::new("BallMaker 9000", width, height, WindowOptions::default()).unwrap();
-        window.limit_update_rate(Some(Duration::from_micros(16600)));
+        window.set_target_fps(60);
         MinifbWindow { width, height, buffer: vec![0; width * height], window }
     }
 

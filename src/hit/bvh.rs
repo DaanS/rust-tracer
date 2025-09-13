@@ -1,6 +1,6 @@
-use std::{fmt::Debug, mem::swap, ops::Index, sync::Arc};
+use std::{fmt::Debug, mem::{swap, take}, ops::Index};
 
-use crate::{config::Float, hit::{Bound, Hit, HitRecord}, material::simple::Material, ray::Ray, util::Interval, vec3::Point};
+use crate::{config::Float, hit::{sphere::Sphere, Bound, Hit, HitRecord}, material::simple::Material, ray::Ray, util::Interval, vec3::Point};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AABB {
@@ -84,7 +84,7 @@ impl Index<usize> for AABB {
 pub trait AxisAlignedBound: Hit + Bound<HitType = AABB> {}
 impl<T: Hit + Bound<HitType = AABB>> AxisAlignedBound for T {}
 
-impl Bound for &[Arc<dyn AxisAlignedBound + Send + Sync>] {
+impl Bound for &mut [Box<dyn AxisAlignedBound + Send + Sync>] {
     type HitType = AABB;
 
     // TODO cache this probably (LazyCell or OnceCell maybe?)
@@ -96,42 +96,47 @@ impl Bound for &[Arc<dyn AxisAlignedBound + Send + Sync>] {
     }
 }
 
+impl Default for Box<dyn AxisAlignedBound + Send + Sync> {
+    fn default() -> Self {
+        Box::new(Sphere::default())
+    }
+}
+
 pub struct Bvh {
     pub aabb: AABB,
-    pub left: Arc<dyn AxisAlignedBound + Send + Sync>,
-    pub right: Arc<dyn AxisAlignedBound + Send + Sync>,
+    pub left: Box<dyn AxisAlignedBound + Send + Sync>,
+    pub right: Box<dyn AxisAlignedBound + Send + Sync>,
 }
 
 impl Bvh {
-    pub fn new(left: Arc<dyn AxisAlignedBound + Send + Sync>, right: Arc<dyn AxisAlignedBound + Send + Sync>) -> Self {
+    pub fn new(left: Box<dyn AxisAlignedBound + Send + Sync>, right: Box<dyn AxisAlignedBound + Send + Sync>) -> Self {
         let aabb = AABB::enclosing(left.bound(), right.bound());
         Bvh { aabb, left, right }
     }
 
-    pub fn from_slice(objects: &[Arc<dyn AxisAlignedBound + Send + Sync>]) -> Self {
+    pub fn from_slice(objects: &mut [Box<dyn AxisAlignedBound + Send + Sync>]) -> Self {
         match objects.len() {
             0 => panic!("Cannot create BVH from an empty slice"),
-            1 => { Bvh::new(objects[0].clone(), objects[0].clone()) },
-            2 => { Bvh::new(objects[0].clone(), objects[1].clone()) },
+            1 => panic!("It makes no sense to create a BVH from a single object"),
+            2 => { Bvh::new(take(&mut objects[0]), take(&mut objects[1])) },
             _ => {
                 let aabb = objects.bound();
 
-                let mut objects = Vec::from(objects);
                 objects.sort_by(|a, b| {
                     let axis = aabb.longest_axis();
                     a.bound()[axis].min.partial_cmp(&b.bound()[axis].min).unwrap()
                 });
 
-                let (left_objects, right_objects) = objects.split_at(objects.len() / 2);
+                let (mut left_objects, mut right_objects) = objects.split_at_mut(objects.len() / 2);
                 assert!(left_objects.len() <= right_objects.len(), "Left side of BVH must not be greater than right side");
                 Bvh {
                     aabb,
                     left: if left_objects.len() == 1 {
-                        left_objects[0].clone()
+                        take(&mut left_objects[0])
                     } else {
-                        Arc::new(Bvh::from_slice(left_objects))
+                        Box::new(Bvh::from_slice(&mut left_objects))
                     },
-                    right: Arc::new(Bvh::from_slice(right_objects))
+                    right: Box::new(Bvh::from_slice(&mut right_objects))
                 }
             }
         }
@@ -194,8 +199,8 @@ fn test_bvh_hit() {
     let s2 = sphere((4., 0., 0.), 1., Material::None);
     let bvh = Bvh {
         aabb: AABB::enclosing(s1.bound(), s2.bound()),
-        left: Arc::new(s1),
-        right: Arc::new(s2),
+        left: Box::new(s1),
+        right: Box::new(s2),
     };
 
     let r1 = ray!((-2, 0, 0) -> (1, 0, 0));
@@ -205,11 +210,11 @@ fn test_bvh_hit() {
     let r3 = ray!((2, -2, 0) -> (0, 1, 0));
     assert!(bvh.hit(r3, 0., f64::MAX).is_none());
 
-    let bvh2 = Bvh::from_slice(&[Arc::new(s1), Arc::new(s2)]);
+    let bvh2 = Bvh::from_slice(&mut [Box::new(s1), Box::new(s2)]);
     assert_eq!(bvh.aabb, bvh2.aabb);
 
     let s3 = sphere((2., 2., 0.), 1., Material::None);
-    let bvh3 = Bvh::from_slice(&[Arc::new(s1), Arc::new(s2), Arc::new(s3)]);
+    let bvh3 = Bvh::from_slice(&mut [Box::new(s1), Box::new(s2), Box::new(s3)]);
     assert_eq!(bvh3.hit(r1, 0., f64::MAX), s1.hit(r1, 0., f64::MAX));
     assert_eq!(bvh3.hit(r2, 0., f64::MAX), s2.hit(r2, 0., f64::MAX));
     assert_eq!(bvh3.hit(r3, 0., f64::MAX), s3.hit(r3, 0., f64::MAX));

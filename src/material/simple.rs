@@ -1,7 +1,8 @@
 use crate::{config::{Color, Float}, material::{Scatter, ScatterRecord}, random::random_float, ray::{ray, Ray}, vec3::{dot, random_unit_vector, Point, Vec3}};
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub enum Material {
+    #[default]
     None,
     Lambertian { color: Color },
     Metal { color: Color, roughness: Float },
