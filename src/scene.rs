@@ -21,7 +21,7 @@ pub fn simple_scene(film: &Film) -> Scene {
     let right_sphere = sphere((1., 0., -1.), 0.5, metal((0.8, 0.6, 0.2), 0.1));
     let ground_sphere = sphere((0., -100.5, -1.), 100., lambertian((1., 1., 0.)));
 
-    let cam = Camera::new(&film, vec3!(0, 0, 0), vec3!(0, 0, -1), vec3!(0, 1, 0), 90., 1., 0.6);
+    let cam = Camera::new(film, vec3!(0, 0, 0), vec3!(0, 0, -1), vec3!(0, 1, 0), 90., 1., 0.6);
 
     Scene { objects: Box::new(vec![center_sphere, left_sphere, right_sphere, ground_sphere]), background_color: overcast_sky_background, cam }
 }
@@ -55,6 +55,6 @@ pub fn random_scene(film: &Film) -> Scene {
 
     let cam = Camera::new(film, vec3!(13, 2, 3), vec3!(0, 0, 0), vec3!(0, 1, 0), 20., 10., 0.6);
 
-    let mut arced_objects = objects.iter().map(|o| Box::new(o.clone()) as Box<dyn AxisAlignedBound + Send + Sync>).collect::<Vec<_>>();
+    let mut arced_objects = objects.iter().map(|o| Box::new(*o) as Box<dyn AxisAlignedBound + Send + Sync>).collect::<Vec<_>>();
     Scene { objects: Box::new(Bvh::from_slice(arced_objects.as_mut_slice())), background_color: overcast_sky_background, cam }
 }

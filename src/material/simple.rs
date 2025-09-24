@@ -20,17 +20,17 @@ fn reflect(v: Vec3, n: Vec3) -> Vec3 {
 impl Scatter for Material {
     fn scatter(&self, ray_in: Ray, pos: Point, normal: Vec3) -> Option<ScatterRecord> {
         match self {
-            Material::Lambertian{color} => { 
+            Material::Lambertian{color} => {
                 let out_dir = normal + random_unit_vector();
-                Some(ScatterRecord { 
-                    attenuation: color.clone(), 
-                    out: ray(pos, if out_dir.near_zero() { normal } else { out_dir }) 
-                }) 
+                Some(ScatterRecord {
+                    attenuation: *color,
+                    out: ray(pos, if out_dir.near_zero() { normal } else { out_dir })
+                })
             },
             Material::Metal{color, roughness} => {
                 let out_dir = reflect(ray_in.direction, normal) + *roughness * random_unit_vector();
                 if dot(out_dir, normal) > 0. {
-                    Some(ScatterRecord { attenuation: color.clone(), out: ray(pos, out_dir) })
+                    Some(ScatterRecord { attenuation: *color, out: ray(pos, out_dir) })
                 } else {
                     None
                 }

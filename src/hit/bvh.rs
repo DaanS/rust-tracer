@@ -56,7 +56,7 @@ impl Hit for AABB {
             let inv_d = 1.0 / r.direction[i];
             let mut t0 = (min - r.origin[i]) * inv_d;
             let mut t1 = (max - r.origin[i]) * inv_d;
-            
+
             if t1 < t0 { swap(&mut t0, &mut t1); }
             if t0 > t_min { t_min = t0; }
             if t1 < t_max { t_max = t1; }
@@ -127,16 +127,16 @@ impl Bvh {
                     a.bound()[axis].min.partial_cmp(&b.bound()[axis].min).unwrap()
                 });
 
-                let (mut left_objects, mut right_objects) = objects.split_at_mut(objects.len() / 2);
+                let (left_objects, right_objects) = objects.split_at_mut(objects.len() / 2);
                 assert!(left_objects.len() <= right_objects.len(), "Left side of BVH must not be greater than right side");
                 Bvh {
                     aabb,
                     left: if left_objects.len() == 1 {
                         take(&mut left_objects[0])
                     } else {
-                        Box::new(Bvh::from_slice(&mut left_objects))
+                        Box::new(Bvh::from_slice(left_objects))
                     },
-                    right: Box::new(Bvh::from_slice(&mut right_objects))
+                    right: Box::new(Bvh::from_slice(right_objects))
                 }
             }
         }
@@ -164,7 +164,7 @@ impl Hit for Bvh {
 impl Bound for Bvh {
     type HitType = AABB;
     fn bound(&self) -> AABB {
-        self.aabb.clone()
+        self.aabb
     }
 }
 
@@ -188,7 +188,7 @@ fn test_aabb() {
     let a = vec3!(0, 0, 0);
     let b = vec3!(1, 1, 1);
     let aabb = AABB::from_points(a, b);
-    
+
     assert_ulps_eq!(aabb.hit(ray!((0.5, 0.5, -0.5) -> (0, 0, 1)), 0., f64::MAX).unwrap().t, 0.5);
     assert!(aabb.hit(ray!((1.5, 1.5, -0.5) -> (0, 0, 1)), 0., f64::MAX).is_none());
 }

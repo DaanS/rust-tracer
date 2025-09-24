@@ -22,15 +22,13 @@ mod conversion;
 
 use std::{fs::create_dir_all, time::Instant};
 
-/// le current todos
-
 use crate::{config::{Film, Float}, film::SampleCollector, integrator::{Integrate, MultiCoreTiledIntegrator, SimpleRayEvaluator}, png::Png, ppm::Ppm, sampler::SquareSampler, scene::random_scene};
 
 fn variance_stats(film: &Film) {
     let mut vals: Vec<Float> = film.pix.iter().map(|sc| sc.avg_variance().r).collect();
     vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-    println!("");
+    println!();
     println!(" === variance stats === ");
     println!("min: {}", vals[0]);
     println!("med: {}", vals[vals.len() / 2]);
@@ -67,7 +65,7 @@ fn main() {
 
     variance_stats(&film);
 
-    println!("");
+    println!();
     println!("Initialization took: {:?}", init_dur);
     println!("Rendering took: {:?}", render_dur);
     println!("Post took: {:?}", post_start.elapsed());

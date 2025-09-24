@@ -67,9 +67,9 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator> Integrate for SimpleIntegrat
         let evaluator = Evaluator::default();
 
         for n in 0..max_samples {
-            win.update(&film, SampleCollector::gamma_corrected_mean);
-            win2.update(&film, SampleCollector::variance);
-            win3.update(&film, SampleCollector::avg_variance);
+            win.update(film, SampleCollector::gamma_corrected_mean);
+            win2.update(film, SampleCollector::variance);
+            win3.update(film, SampleCollector::avg_variance);
 
             for x in 0..film.width {
                 for y in 0..film.height {
@@ -90,7 +90,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator> Integrate for SimpleIntegrat
             }
         }
 
-        println!("");
+        println!();
         println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
     }
 }
@@ -137,15 +137,15 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                 sample_count += Self::integrate_tile(scene, &mut tile_film, x, y, min_samples, max_samples, variance_target);
                 film.overwrite_with((x * TILE_WIDTH, y * TILE_HEIGHT), &tile_film);
 
-                win.update(&film, SampleCollector::gamma_corrected_mean);
-                win2.update(&film, SampleCollector::variance);
-                win3.update(&film, SampleCollector::avg_variance);
+                win.update(film, SampleCollector::gamma_corrected_mean);
+                win2.update(film, SampleCollector::variance);
+                win3.update(film, SampleCollector::avg_variance);
 
                 print_progress((y + x * tiles_ver) as Float / (tiles_hor * tiles_ver) as Float);
             }
         }
 
-        println!("");
+        println!();
         println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
     }
 }
@@ -224,7 +224,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
         let sample_count = *sample_count.lock().unwrap();
 
-        println!("");
+        println!();
         println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (width * height * max_samples) as Float);
     }
 
@@ -233,7 +233,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         let tiles_ver = height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT);
 
         JobQueue::new(CoordinateRange(0..tiles_hor, 0..tiles_ver).iter().map(|(x, y)| {
-            move |out: &mut dyn Write| 
+            move |out: &mut dyn Write|
                 Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
         }).collect())
     }
@@ -252,7 +252,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                     sample_count += 1;
                     let (s, t) = sampler.pixel_sample((topleft_x + x, topleft_y + y));
                     let r = scene.cam.ray((s, t));
-                    local_film.add_sample((x, y), evaluator.li(&scene, r, 8));
+                    local_film.add_sample((x, y), evaluator.li(scene, r, 8));
                 }
             }
         }
@@ -260,19 +260,19 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         Png::write(tile_width, tile_height, local_film.to_rgb8(|s| color_gamma(s.mean())), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
         film.lock().unwrap().overwrite_with((topleft_x, topleft_y), &local_film);
         sample_count
-    }   
+    }
 
     fn spawn_workers<'scope, 'env>(scope: &'scope Scope<'scope, 'env>, queue: &'scope JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'scope>, sample_count: &'scope Mutex<usize>) {
         for i in 0..WORKER_COUNT {
             scope.spawn(move || {
                 let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
-                write!(out, "thread {i} reporting\n").unwrap();
+                writeln!(out, "thread {i} reporting").unwrap();
                 while let Some(job) = queue.get_job() {
                     let local_sample_count = job(&mut out);
-                    write!(out, "finished job with {local_sample_count} samples\n").unwrap();
+                    writeln!(out, "finished job with {local_sample_count} samples").unwrap();
                     *sample_count.lock().unwrap() += local_sample_count;
                 }
-                write!(out, "thread {i} done\n").unwrap();
+                writeln!(out, "thread {i} done").unwrap();
             });
         };
     }

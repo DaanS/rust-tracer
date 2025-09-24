@@ -16,7 +16,7 @@ impl Ppm {
         write!(buf, "{}", self).unwrap();
 
         let path = Path::new(path_str);
-        if let Some(parent) = path.parent() { 
+        if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).unwrap();
         }
         std::fs::write(path, buf).unwrap();
@@ -33,7 +33,7 @@ impl Display for Ppm {
         write!(f, "P3\n{} {}\n255\n", self.width, self.height)?;
         for col in self.pix.chunks(3) {
             match col {
-                &[r, g, b] => write!(f, "{r} {g} {b}\n")?,
+                &[r, g, b] => writeln!(f, "{r} {g} {b}")?,
                 _ => panic!("expected &[r, g, b], found: {:?}", col)
             }
         }
