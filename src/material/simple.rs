@@ -24,13 +24,13 @@ impl Scatter for Material {
                 let out_dir = normal + random_unit_vector();
                 Some(ScatterRecord {
                     attenuation: *color,
-                    out: ray(pos, if out_dir.near_zero() { normal } else { out_dir })
+                    out: ray(pos, if out_dir.near_zero() { normal } else { out_dir }, ray_in.time)
                 })
             },
             Material::Metal{color, roughness} => {
                 let out_dir = reflect(ray_in.direction, normal) + *roughness * random_unit_vector();
                 if dot(out_dir, normal) > 0. {
-                    Some(ScatterRecord { attenuation: *color, out: ray(pos, out_dir) })
+                    Some(ScatterRecord { attenuation: *color, out: ray(pos, out_dir, ray_in.time) })
                 } else {
                     None
                 }
@@ -54,7 +54,7 @@ impl Scatter for Material {
                     let out_dir_parallel = -((1. - out_dir_perpendicular.length_squared()).abs().sqrt()) * normal;
                     out_dir_parallel + out_dir_perpendicular
                 };
-                Some(ScatterRecord { attenuation: (1., 1., 1.).into(), out: ray(pos, out_dir) })
+                Some(ScatterRecord { attenuation: (1., 1., 1.).into(), out: ray(pos, out_dir, ray_in.time) })
             },
             Material::None => { None }
         }

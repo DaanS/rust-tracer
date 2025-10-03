@@ -1,4 +1,4 @@
-use crate::{ray::Ray, ray::ray, config::{Film, Float}, vec3::{Vec3, cross, random_vector_in_unit_disk}, util::radians};
+use crate::{config::{Film, Float}, ray::{ray, Ray}, util::{radians, Interval}, vec3::{cross, random_vector_in_unit_disk, Vec3}};
 
 #[derive(Clone, Copy)]
 pub struct Camera {
@@ -7,11 +7,12 @@ pub struct Camera {
     pixel_delta_u: Vec3,
     pixel_delta_v: Vec3,
     defocus_disk_u: Vec3,
-    defocus_disk_v: Vec3
+    defocus_disk_v: Vec3,
+    time: Interval,
 }
 
 impl Camera {
-    pub fn new(film: &Film, from: Vec3, to: Vec3, up: Vec3, vfov: Float, focal_len: Float, defocus_angle: Float) -> Camera {
+    pub fn new(film: &Film, from: Vec3, to: Vec3, up: Vec3, vfov: Float, focal_len: Float, defocus_angle: Float, time: Interval) -> Camera {
         let aspect_ratio = film.width as Float / film.height as Float;
         let theta = radians(vfov);
         let h = (theta / 2.).tan(); // half viewport height divided by focal length
@@ -35,7 +36,7 @@ impl Camera {
         let defocus_disk_u = u * defocus_radius;
         let defocus_disk_v = v * defocus_radius;
 
-        Camera { cam_pos: from, pixel_center_upper_left, pixel_delta_u, pixel_delta_v, defocus_disk_u, defocus_disk_v }
+        Camera { cam_pos: from, pixel_center_upper_left, pixel_delta_u, pixel_delta_v, defocus_disk_u, defocus_disk_v, time }
     }
 
     pub fn ray(&self, (s, t): (Float, Float)) -> Ray {
@@ -44,6 +45,6 @@ impl Camera {
         let pos = self.cam_pos + offset.x * self.defocus_disk_u + offset.y * self.defocus_disk_v;
         let direction = target - pos;
 
-        ray(pos, direction)
+        ray(pos, direction, self.time.random())
     }
 }

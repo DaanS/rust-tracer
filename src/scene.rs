@@ -1,4 +1,4 @@
-use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{bvh::{AxisAlignedBound, Bvh}, sphere::sphere, Hit}, material::simple::{dielectric, lambertian, metal}, random::{random_float, random_in_range}, ray::Ray, vec3::{vec3, Vec3}};
+use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{bvh::{AxisAlignedBound, Bvh}, sphere::{sphere, MovingSphere}, Hit}, material::simple::{dielectric, lambertian, metal}, random::{random_float, random_in_range}, ray::Ray, vec3::{vec3, Vec3}};
 
 pub struct Scene {
     pub objects: Box<dyn Hit + Send + Sync>,
@@ -21,7 +21,7 @@ pub fn simple_scene(film: &Film) -> Scene {
     let right_sphere = sphere((1., 0., -1.), 0.5, metal((0.8, 0.6, 0.2), 0.1));
     let ground_sphere = sphere((0., -100.5, -1.), 100., lambertian((1., 1., 0.)));
 
-    let cam = Camera::new(film, vec3!(0, 0, 0), vec3!(0, 0, -1), vec3!(0, 1, 0), 90., 1., 0.6);
+    let cam = Camera::new(film, vec3!(0, 0, 0), vec3!(0, 0, -1), vec3!(0, 1, 0), 90., 1., 0.6, (0., 0.).into());
 
     Scene { objects: Box::new(vec![center_sphere, left_sphere, right_sphere, ground_sphere]), background_color: overcast_sky_background, cam }
 }
@@ -30,11 +30,11 @@ pub fn random_scene(film: &Film) -> Scene {
     //for _i in 0..16 { random_float(); }
     for _i in 0..40315 { random_float(); }
 
-    let ground_sphere = sphere((0., -1000., 0.), 1000., lambertian((1., 1., 0.)));
-    let glass_sphere = sphere((0., 1., 0.), 1., dielectric(1.5));
-    let metal_sphere = sphere((4., 1., 0.), 1., metal((0.7, 0.6, 0.5), 0.));
-    let lamb_sphere = sphere((-4., 1., 0.), 1., lambertian((0.7, 0.3, 0.3)));
-    let mut objects = vec![ground_sphere, glass_sphere, metal_sphere, lamb_sphere];
+    let ground_sphere = Box::new(sphere((0., -1000., 0.), 1000., lambertian((1., 1., 0.))));
+    let glass_sphere = Box::new(sphere((0., 1., 0.), 1., dielectric(1.5)));
+    let metal_sphere = Box::new(sphere((4., 1., 0.), 1., metal((0.7, 0.6, 0.5), 0.)));
+    let lamb_sphere = Box::new(sphere((-4., 1., 0.), 1., lambertian((0.7, 0.3, 0.3))));
+    let mut objects: Vec<Box<dyn AxisAlignedBound + Send + Sync>> = vec![ground_sphere, glass_sphere, metal_sphere, lamb_sphere];
 
     for a in -11..11 {
         for b in -11..11 {
@@ -43,18 +43,25 @@ pub fn random_scene(film: &Film) -> Scene {
             if (Vec3::from(center) - vec3(4., 0.2, 0.)).length() > 0.9 {
                 let mat_rng = random_float();
                 if mat_rng < 0.8 {
-                    objects.push(sphere(center, 0.2, lambertian(Color::random_in_range(0., 1.).into()))) ;
+                    //objects.push(sphere(center, 0.2, lambertian(Color::random_in_range(0., 1.).into()))) ;
+                    objects.push(Box::new(MovingSphere {
+                        center0: Vec3::from(center),
+                        center1: Vec3::from(center) + vec3(0., random_in_range(0., 0.5), 0.),
+                        time0: 0.,
+                        time1: 1.,
+                        radius: 0.2,
+                        material: lambertian(Color::random_in_range(0., 1.).into())
+                    }));
                 } else if mat_rng < 0.95 {
-                    objects.push(sphere(center, 0.2, metal(Color::random_in_range(0.5, 1.0).into(), random_in_range(0., 0.2))));
+                    objects.push(Box::new(sphere(center, 0.2, metal(Color::random_in_range(0.5, 1.0).into(), random_in_range(0., 0.2)))));
                 } else {
-                    objects.push(sphere(center, 0.2, dielectric(random_in_range(1.4, 1.6))));
+                    objects.push(Box::new(sphere(center, 0.2, dielectric(random_in_range(1.4, 1.6)))));
                 }
             }
         }
     }
 
-    let cam = Camera::new(film, vec3!(13, 2, 3), vec3!(0, 0, 0), vec3!(0, 1, 0), 20., 10., 0.6);
+    let cam = Camera::new(film, vec3!(13, 2, 3), vec3!(0, 0, 0), vec3!(0, 1, 0), 20., 10., 0.6, (0., 1.).into());
 
-    let mut arced_objects = objects.iter().map(|o| Box::new(*o) as Box<dyn AxisAlignedBound + Send + Sync>).collect::<Vec<_>>();
-    Scene { objects: Box::new(Bvh::from_slice(arced_objects.as_mut_slice())), background_color: overcast_sky_background, cam }
+    Scene { objects: Box::new(Bvh::from_slice(objects.as_mut_slice())), background_color: overcast_sky_background, cam }
 }

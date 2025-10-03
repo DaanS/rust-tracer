@@ -1,4 +1,4 @@
-use crate::config::{Float, PI};
+use crate::{config::{Float, PI}, random::random_in_range};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Interval {
@@ -28,6 +28,10 @@ impl Interval {
 
     pub fn length(&self) -> Float {
         self.max - self.min
+    }
+
+    pub fn random(&self) -> Float {
+        random_in_range(self.min, self.max)
     }
 }
 

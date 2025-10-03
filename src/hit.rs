@@ -2,6 +2,7 @@ use crate::{config::Float, material::simple::Material, ray::Ray, vec3::{Point, V
 
 pub mod sphere;
 pub mod bvh;
+pub mod instance;
 
 #[derive(PartialEq, Debug)]
 pub struct HitRecord {
