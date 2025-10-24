@@ -3,7 +3,7 @@ use crate::{config::Float, hit::{bvh::{AxisAlignedBound, AABB}, Bound, Hit, HitR
 #[inline(always)]
 fn translate_hit(r: Ray, offset: Vec3, object: &dyn Hit, t_min: Float, t_max: Float) -> Option<HitRecord> {
     let moved_ray = Ray { origin: r.origin - offset, direction: r.direction, time: r.time, };
-    object.hit(moved_ray, t_min, t_max)
+    object.hit(moved_ray, t_min, t_max).and_then(|mut hit| { hit.pos += offset; Some(hit)})
 }
 
 #[inline(always)]
@@ -16,7 +16,7 @@ fn translate_bound(offset: Vec3, object: &dyn Bound<HitType=AABB>) -> AABB {
     }
 }
 
-struct Translate {
+pub struct Translate {
     pub offset: Vec3,
     pub object: Box<dyn AxisAlignedBound + Send + Sync>,
 }
@@ -34,10 +34,10 @@ impl Bound for Translate {
     }
 }
 
-struct Animate {
+pub struct Animate {
     pub offset_start: Vec3,
     pub offset_end: Vec3,
-    pub interpolation: Box<dyn Fn(Float) -> Float>,
+    pub interpolation: Box<dyn Fn(Float) -> Float + Send + Sync>,
     pub object: Box<dyn AxisAlignedBound + Send + Sync>,
 }
 

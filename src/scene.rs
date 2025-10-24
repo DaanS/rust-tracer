@@ -1,4 +1,4 @@
-use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{bvh::{AxisAlignedBound, Bvh}, sphere::{sphere, MovingSphere}, Hit}, material::simple::{dielectric, lambertian, metal}, random::{random_float, random_in_range}, ray::Ray, vec3::{vec3, Vec3}};
+use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{bvh::{AxisAlignedBound, Bvh}, instance::Animate, sphere::{sphere, MovingSphere}, Hit}, material::simple::{dielectric, lambertian, metal}, random::{random_float, random_in_range}, ray::Ray, vec3::{vec3, Vec3}};
 
 pub struct Scene {
     pub objects: Box<dyn Hit + Send + Sync>,
@@ -52,6 +52,12 @@ pub fn random_scene(film: &Film) -> Scene {
                         radius: 0.2,
                         material: lambertian(Color::random_in_range(0., 1.).into())
                     }));
+                    //objects.push(Box::new(Animate {
+                    //    offset_start: vec3(0., 0., 0.),
+                    //    offset_end: vec3(0., random_in_range(0., 0.5), 0.),
+                    //    interpolation: Box::new(|t| t),
+                    //    object: Box::new(sphere(center, 0.2, lambertian(Color::random_in_range(0., 1.).into())))
+                    //}));
                 } else if mat_rng < 0.95 {
                     objects.push(Box::new(sphere(center, 0.2, metal(Color::random_in_range(0.5, 1.0).into(), random_in_range(0., 0.2)))));
                 } else {

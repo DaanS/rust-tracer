@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, Div, Index, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Div, Index, Mul, Neg, Sub};
 
 use crate::config::Float;
 use crate::random::random_in_range;
@@ -87,6 +87,14 @@ impl Neg for Vec3 { type Output = Self;
 
 impl Add for Vec3 { type Output = Self;
     fn add(self, v: Self) -> Self { vec3(self.x + v.x, self.y + v.y, self.z + v.z) }
+}
+
+impl AddAssign for Vec3 {
+    fn add_assign(&mut self, other: Self) {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
+    }
 }
 
 impl Sub for Vec3 { type Output = Self;
