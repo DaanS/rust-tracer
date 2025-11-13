@@ -124,7 +124,8 @@ impl Bvh {
 
                 objects.sort_by(|a, b| {
                     let axis = aabb.longest_axis();
-                    a.bound()[axis].min.partial_cmp(&b.bound()[axis].min).unwrap()
+                    // XXX without the 'as AABB' rust-analyzer seems to think min is a function
+                    (a.bound() as AABB)[axis].min.partial_cmp(&(b.bound() as AABB)[axis].min).unwrap()
                 });
 
                 let (left_objects, right_objects) = objects.split_at_mut(objects.len() / 2);
@@ -209,6 +210,12 @@ fn test_bvh_hit() {
     assert_eq!(bvh.hit(r2, 0., f64::MAX), s2.hit(r2, 0., f64::MAX));
     let r3 = ray!((2, -2, 0) -> (0, 1, 0));
     assert!(bvh.hit(r3, 0., f64::MAX).is_none());
+    let r4 = ray!((2, 0, 0) -> (1, 0, 0));
+    assert_eq!(bvh.hit(r4, 0., f64::MAX), s2.hit(r4, 0., f64::MAX));
+    let r5 = ray!((-1, 0, 0) -> (1, 0, 0));
+    assert_eq!(bvh.hit(r5, 3., f64::MAX), s2.hit(r5, 3., f64::MAX));
+    let r6 = ray!((0, 0, 0) -> (1, 0, 0));
+    assert_eq!(bvh.hit(r6, 0., f64::MAX), s1.hit(r6, 0., f64::MAX));
 
     let bvh2 = Bvh::from_slice(&mut [Box::new(s1), Box::new(s2)]);
     assert_eq!(bvh.aabb, bvh2.aabb);
