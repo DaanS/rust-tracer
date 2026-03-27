@@ -51,65 +51,17 @@ impl Bound for Sphere {
     }
 }
 
-// TODO put this somewhere sensible when we get more shapes
-impl Hit for Vec<Sphere> {
-    fn hit(&self, r: Ray, t_min: Float, t_max: Float) -> Option<HitRecord> {
-        let mut res = None;
-        let mut cur_t_max = t_max;
-
-        for s in self {
-            if let Some(hit_record) = s.hit(r, t_min, cur_t_max) {
-                cur_t_max = hit_record.t;
-                res = Some(hit_record);
-            }
-        }
-
-        res
-    }
-}
-
+// I'd like to make this generic over Hit, but that runs into some conceptual issues if I want to support different types of bounding volumes.
+// The way I'm doing this right now would require the bounding volume type to implement a default and enclosing method. This feels a bit much
+// to put directly into Hit, and I'm also not sure I want to introduce a separate trait for bounding volumes.
 impl Bound for Vec<Sphere> {
     type HitType = AABB;
     // TODO cache this probably (LazyCell or OnceCell maybe?)
-    // TODO also move this somewhere sensible along with the Hit impl
     fn bound(&self) -> AABB {
         self.iter().fold(
             AABB::new((0., 0.).into(), (0., 0.).into(), (0., 0.).into()),
             |aabb, s| AABB::enclosing(aabb, s.bound())
         )
-    }
-}
-
-pub struct MovingSphere {
-    pub center0: Point,
-    pub center1: Point,
-    pub time0: Float,
-    pub time1: Float,
-    pub radius: Float,
-    pub material: Material,
-}
-
-impl Hit for MovingSphere {
-    fn hit(&self, r: Ray, t_min: Float, t_max: Float) -> Option<HitRecord> {
-        let center = self.center0 + ((r.time - self.time0) / (self.time1 - self.time0)) * (self.center1 - self.center0);
-        Sphere { center, radius: self.radius, material: self.material }.hit(r, t_min, t_max)
-    }
-}
-
-impl Bound for MovingSphere {
-    type HitType = AABB;
-    fn bound(&self) -> AABB {
-        let aabb0 = AABB {
-            x: (self.center0.x - self.radius, self.center0.x + self.radius).into(),
-            y: (self.center0.y - self.radius, self.center0.y + self.radius).into(),
-            z: (self.center0.z - self.radius, self.center0.z + self.radius).into(),
-        };
-        let aabb1 = AABB {
-            x: (self.center1.x - self.radius, self.center1.x + self.radius).into(),
-            y: (self.center1.y - self.radius, self.center1.y + self.radius).into(),
-            z: (self.center1.z - self.radius, self.center1.z + self.radius).into(),
-        };
-        AABB::enclosing(aabb0, aabb1)
     }
 }
 

@@ -1,5 +1,10 @@
 use crate::{config::{Color, Float}, material::{Scatter, ScatterRecord}, random::random_float, ray::{ray, Ray}, vec3::{dot, random_unit_vector, Point, Vec3}};
 
+// I've gone back and forth on keeping Material as an enum or a trait. The Scatter implementation for the enum
+// version is ugly as sin, but it's also efficient. When trying to turn it into a trait object, I ran into the issue
+// that trait objects aren't easily copyable. I considered making Materials shared references, but I couldn't figure
+// out how to do that without using Arcs, and the performance overhead of that was quite noticeable. Hopefully I can
+// keep the Materials small, and figure out a different approach for textures.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub enum Material {
     #[default]

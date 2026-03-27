@@ -16,6 +16,22 @@ pub trait Hit {
     fn hit(&self, r: Ray, t_min: Float, t_max: Float) -> Option<HitRecord>;
 }
 
+impl<T: Hit> Hit for Vec<T> {
+    fn hit(&self, r: Ray, t_min: Float, t_max: Float) -> Option<HitRecord> {
+        let mut res = None;
+        let mut cur_t_max = t_max;
+
+        for s in self {
+            if let Some(hit) = s.hit(r, t_min, cur_t_max) {
+                cur_t_max = hit.t;
+                res = Some(hit);
+            }
+        }
+
+        res
+    }
+}
+
 pub trait Bound {
     type HitType: Hit;
     fn bound(&self) -> Self::HitType;

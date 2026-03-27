@@ -50,7 +50,7 @@ impl SampleCollector {
         self.sum_squared_diffs += delta_n * delta_n_min_1;
     }
 
-    // TODO test
+    // TODO use?
     pub fn merged_with(&self, other: &SampleCollector) -> SampleCollector {
         let new_n = self.n + other.n;
         let new_mean = (self.n as f64 * self.mean + other.n as f64 * other.mean) / new_n as f64;
