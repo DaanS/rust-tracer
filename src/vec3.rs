@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(v.length(), 2.);
         assert_eq!(v.length_squared(), 4.);
         assert_eq!(vec3!(1, 1, 0).length(), Float::sqrt(2.));
-        assert_eq!((vec3!(5, 3, 9)).normalize().length(), 1.);
+        assert_ulps_eq!((vec3!(5, 3, 9)).normalize().length(), 1.);
     }
 
     #[test]

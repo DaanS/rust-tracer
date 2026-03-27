@@ -53,9 +53,9 @@ impl SampleCollector {
     // TODO use?
     pub fn merged_with(&self, other: &SampleCollector) -> SampleCollector {
         let new_n = self.n + other.n;
-        let new_mean = (self.n as f64 * self.mean + other.n as f64 * other.mean) / new_n as f64;
+        let new_mean = (self.n as Float * self.mean + other.n as Float * other.mean) / new_n as Float;
         let delta = other.mean - self.mean;
-        let new_sum_squared_diffs = self.sum_squared_diffs + other.sum_squared_diffs + delta * delta * self.n as f64 * other.n as f64 / new_n as f64;
+        let new_sum_squared_diffs = self.sum_squared_diffs + other.sum_squared_diffs + delta * delta * self.n as Float * other.n as Float / new_n as Float;
         SampleCollector { mean: new_mean, sum_squared_diffs: new_sum_squared_diffs, n: new_n }
     }
 

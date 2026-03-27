@@ -190,8 +190,8 @@ fn test_aabb() {
     let b = vec3!(1, 1, 1);
     let aabb = AABB::from_points(a, b);
 
-    assert_ulps_eq!(aabb.hit(ray!((0.5, 0.5, -0.5) -> (0, 0, 1)), 0., f64::MAX).unwrap().t, 0.5);
-    assert!(aabb.hit(ray!((1.5, 1.5, -0.5) -> (0, 0, 1)), 0., f64::MAX).is_none());
+    assert_ulps_eq!(aabb.hit(ray!((0.5, 0.5, -0.5) -> (0, 0, 1)), 0., Float::MAX).unwrap().t, 0.5);
+    assert!(aabb.hit(ray!((1.5, 1.5, -0.5) -> (0, 0, 1)), 0., Float::MAX).is_none());
 }
 
 #[test]
@@ -205,25 +205,25 @@ fn test_bvh_hit() {
     };
 
     let r1 = ray!((-2, 0, 0) -> (1, 0, 0));
-    assert_eq!(bvh.hit(r1, 0., f64::MAX), s1.hit(r1, 0., f64::MAX));
+    assert_eq!(bvh.hit(r1, 0., Float::MAX), s1.hit(r1, 0., Float::MAX));
     let r2 = ray!((6, 0, 0) -> (-1, 0, 0));
-    assert_eq!(bvh.hit(r2, 0., f64::MAX), s2.hit(r2, 0., f64::MAX));
+    assert_eq!(bvh.hit(r2, 0., Float::MAX), s2.hit(r2, 0., Float::MAX));
     let r3 = ray!((2, -2, 0) -> (0, 1, 0));
-    assert!(bvh.hit(r3, 0., f64::MAX).is_none());
+    assert!(bvh.hit(r3, 0., Float::MAX).is_none());
     let r4 = ray!((2, 0, 0) -> (1, 0, 0));
-    assert_eq!(bvh.hit(r4, 0., f64::MAX), s2.hit(r4, 0., f64::MAX));
+    assert_eq!(bvh.hit(r4, 0., Float::MAX), s2.hit(r4, 0., Float::MAX));
     let r5 = ray!((-1, 0, 0) -> (1, 0, 0));
-    assert_eq!(bvh.hit(r5, 3., f64::MAX), s2.hit(r5, 3., f64::MAX));
+    assert_eq!(bvh.hit(r5, 3., Float::MAX), s2.hit(r5, 3., Float::MAX));
     let r6 = ray!((0, 0, 0) -> (1, 0, 0));
-    assert_eq!(bvh.hit(r6, 0., f64::MAX), s1.hit(r6, 0., f64::MAX));
+    assert_eq!(bvh.hit(r6, 0., Float::MAX), s1.hit(r6, 0., Float::MAX));
 
     let bvh2 = Bvh::from_slice(&mut [Box::new(s1), Box::new(s2)]);
     assert_eq!(bvh.aabb, bvh2.aabb);
 
     let s3 = sphere((2., 2., 0.), 1., Material::None);
     let bvh3 = Bvh::from_slice(&mut [Box::new(s1), Box::new(s2), Box::new(s3)]);
-    assert_eq!(bvh3.hit(r1, 0., f64::MAX), s1.hit(r1, 0., f64::MAX));
-    assert_eq!(bvh3.hit(r2, 0., f64::MAX), s2.hit(r2, 0., f64::MAX));
-    assert_eq!(bvh3.hit(r3, 0., f64::MAX), s3.hit(r3, 0., f64::MAX));
-    assert!(bvh3.hit(ray!((2, 0, 0) -> (0, 0, 1)), 0., f64::MAX).is_none());
+    assert_eq!(bvh3.hit(r1, 0., Float::MAX), s1.hit(r1, 0., Float::MAX));
+    assert_eq!(bvh3.hit(r2, 0., Float::MAX), s2.hit(r2, 0., Float::MAX));
+    assert_eq!(bvh3.hit(r3, 0., Float::MAX), s3.hit(r3, 0., Float::MAX));
+    assert!(bvh3.hit(ray!((2, 0, 0) -> (0, 0, 1)), 0., Float::MAX).is_none());
 }

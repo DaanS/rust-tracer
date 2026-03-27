@@ -74,15 +74,16 @@ mod tests {
     fn test_hit_sphere() {
         let s = sphere((0., 0., 0.), 1., Material::None);
 
-        assert!(s.hit(ray!((-10, 0, 0) -> (1., 0., 0.)), 0., f64::INFINITY).is_some());
+        assert!(s.hit(ray!((-10, 0, 0) -> (1., 0., 0.)), 0., Float::INFINITY).is_some());
 
-        assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
-        assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
-        assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t == 1.);
+        assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., Float::MAX).unwrap().t == 1.);
+        assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., Float::MAX).unwrap().t == 1.);
+        assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., Float::MAX).unwrap().t == 1.);
 
-        assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(-1, 0, 0));
-        assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(1, 0, 0));
-        assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().normal == vec3!(1, 0, 0));
+        assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., Float::MAX).unwrap().normal == vec3!(-1, 0, 0));
+        assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., Float::MAX).unwrap().normal == vec3!(1, 0, 0));
+        assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., Float::MAX).unwrap().normal == vec3!(1, 0, 0));
+
     }
 
     #[test]
@@ -104,8 +105,8 @@ mod tests {
         let s2 = sphere((-1., 0., 0.), 1., Material::None);
         let v = vec![s1, s2];
 
-        assert_eq!(v.hit(ray!((3, 0, 0) -> (-1, 0, 0)), 0., f64::MAX).unwrap().t, 1.);
-        assert_eq!(v.hit(ray!((-3, 0, 0) -> (1, 0, 0)), 0., f64::MAX).unwrap().t, 1.);
+        assert_eq!(v.hit(ray!((3, 0, 0) -> (-1, 0, 0)), 0., Float::MAX).unwrap().t, 1.);
+        assert_eq!(v.hit(ray!((-3, 0, 0) -> (1, 0, 0)), 0., Float::MAX).unwrap().t, 1.);
     }
 
     #[test]

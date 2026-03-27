@@ -68,14 +68,14 @@ impl Scatter for Material {
 
 #[cfg(test)]
 mod tests {
-    use crate::{color::color_rgb, hit::{sphere::sphere, Hit}, material::{simple::{dielectric, metal, Material}, Scatter}, ray::Ray, vec3::dot};
+    use crate::{color::color_rgb, config::Float, hit::{Hit, sphere::sphere}, material::{Scatter, simple::{Material, dielectric, metal}}, ray::Ray, vec3::dot};
 
     #[test]
     fn test_scatter_anti_normal() {
         let color = color_rgb(0.8, 0.6, 0.4);
         let mut s = sphere((0., 0., 0.), 0.5, Material::Lambertian { color });
         let r = ray!((-1, 0, 0) -> (1, 0, 0));
-        let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
+        let h = s.hit(r.clone(), 0.001, Float::INFINITY).unwrap();
 
         let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
         assert_eq!(scatter_rec.attenuation, (0.8, 0.6, 0.4).into());
@@ -100,13 +100,13 @@ mod tests {
         let s = sphere((0., 0., 0.), 0.5, dielectric(1.3));
 
         let r = ray!((-1, 0, 0) -> (1, 0, 0));
-        let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
+        let h = s.hit(r.clone(), 0.001, Float::INFINITY).unwrap();
         let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
         assert_eq!(scatter_rec.out.direction, r.direction);
         assert_eq!(scatter_rec.out.origin, h.pos);
 
         let r = ray!((-1.5, -1, 0) -> (1, 1, 0));
-        let h = s.hit(r.clone(), 0.001, f64::INFINITY).unwrap();
+        let h = s.hit(r.clone(), 0.001, Float::INFINITY).unwrap();
         let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
         assert!(dot(r.direction, scatter_rec.out.direction) > 0.);
         assert!(dot(h.normal, scatter_rec.out.direction) < 0.);
