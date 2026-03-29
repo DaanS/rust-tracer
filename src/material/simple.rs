@@ -1,4 +1,4 @@
-use crate::{config::{Color, Float}, material::{Scatter, ScatterRecord}, random::random_float, ray::{Ray, ray}, scene::Scene, vec3::{Point, Vec3, dot, random_unit_vector}};
+use crate::{config::{Color, Float}, material::{Scatter, ScatterRecord}, random::random_float, ray::{Ray, ray}, scene::Scene, texture::TextureHandle, vec3::{Point, Vec3, dot, random_unit_vector}};
 
 // I've gone back and forth on keeping Material as an enum or a trait. The Scatter implementation for the enum
 // version is ugly as sin, but it's also efficient. When trying to turn it into a trait object, I ran into the issue
@@ -10,13 +10,13 @@ pub enum Material {
     #[default]
     None,
     Lambertian { color: Color },
-    LambertianTexture { texture_index: usize },
+    LambertianTexture { texture: TextureHandle },
     Metal { color: Color, roughness: Float },
     Dielectric { ir: Float }
 }
 
 pub fn lambertian(color: (Float, Float, Float)) -> Material { Material::Lambertian { color: color.into() }}
-pub fn lambertian_texture(texture_index: usize) -> Material { Material::LambertianTexture { texture_index }}
+pub fn lambertian_texture(texture: TextureHandle) -> Material { Material::LambertianTexture { texture }}
 pub fn metal(color: (Float, Float, Float), roughness: Float) -> Material { Material::Metal { color: color.into(), roughness }}
 pub fn dielectric(ir: Float) -> Material { Material::Dielectric { ir }}
 
@@ -34,10 +34,10 @@ impl Scatter for Material {
                     out: ray(pos, if out_dir.near_zero() { normal } else { out_dir }, ray_in.time)
                 })
             },
-            Material::LambertianTexture{texture_index} => {
+            Material::LambertianTexture{texture} => {
                 let out_dir = normal + random_unit_vector();
                 Some(ScatterRecord {
-                    attenuation: scene.texture_repository.texture_value(*texture_index, uv, pos),
+                    attenuation: scene.texture_repository.texture_value(*texture, uv, pos),
                     out: ray(pos, if out_dir.near_zero() { normal } else { out_dir }, ray_in.time)
                 })
             },

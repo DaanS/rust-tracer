@@ -36,10 +36,13 @@ pub fn simple_scene(film: &Film) -> Scene {
 pub fn random_scene(film: &Film) -> Scene {
     for _i in 0..40315 { random_float(); }
 
+    let mut texture_repository = TextureRepository::new();
+
     let ground_sphere = Box::new(sphere((0., -1000., 0.), 1000., lambertian((1., 1., 0.))));
     let glass_sphere = Box::new(sphere((0., 1., 0.), 1., dielectric(1.5)));
     let metal_sphere = Box::new(sphere((4., 1., 0.), 1., metal((0.7, 0.6, 0.5), 0.)));
-    let lamb_sphere = Box::new(sphere((-4., 1., 0.), 1., lambertian((0.7, 0.3, 0.3))));
+    //let lamb_sphere = Box::new(sphere((-4., 1., 0.), 1., lambertian((0.7, 0.3, 0.3))));
+    let lamb_sphere = Box::new(sphere((-4., 1., 0.), 1., lambertian_texture(texture_repository.load_texture("res/earthmap.jpg"))));
     let mut objects: Vec<Box<dyn AxisAlignedBound + Send + Sync>> = vec![ground_sphere, glass_sphere, metal_sphere, lamb_sphere];
 
     for a in -11..11 {

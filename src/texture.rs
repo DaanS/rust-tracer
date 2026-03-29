@@ -21,12 +21,12 @@ impl TextureValue for RgbImage {
     }
 }
 
+pub type TextureHandle = usize;
 pub struct TextureRepository {
     textures: Vec<RgbImage>,
-    path_indices: HashMap<String, usize>,
+    path_indices: HashMap<String, TextureHandle>,
 }
 
-type TextureHandle = usize;
 impl TextureRepository {
     pub fn new() -> Self {
         TextureRepository { textures: Vec::new(), path_indices: HashMap::new() }
