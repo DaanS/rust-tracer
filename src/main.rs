@@ -19,6 +19,7 @@ mod config;
 mod sampler;
 mod window;
 mod conversion;
+mod texture;
 
 use std::{fs::create_dir_all, time::Instant};
 

@@ -3,12 +3,12 @@ use crate::{config::{Color, Float}, util::clamp};
 
 // maybe move this elsewhere?
 pub fn map_color_component(comp: Float) -> u8 {
-    const GAMMA: Float = 2.;
+    const GAMMA: Float = 2.2;
     (clamp(comp, (0., 1.)).powf(1. / GAMMA) * 255 as Float) as u8
 }
 
 pub fn component_gamma(comp: Float) -> Float {
-    const GAMMA: Float = 2.;
+    const GAMMA: Float = 2.2;
     comp.powf(1. / GAMMA)
 }
 

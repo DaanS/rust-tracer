@@ -65,7 +65,7 @@ impl Hit for AABB {
                 return None;
             }
         }
-        Some(HitRecord{ t: t_min, material: Material::None, normal: vec3!(0., 0., 0.), pos: r.at(t_min) })
+        Some(HitRecord{ t: t_min, material: Material::None, normal: vec3!(0., 0., 0.), pos: r.at(t_min), uv: (0., 0.) })
     }
 }
 

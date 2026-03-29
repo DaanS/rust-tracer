@@ -1,9 +1,16 @@
-use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{Hit, bvh::{AxisAlignedBound, Bvh}, instance::Animate, sphere::{sphere}}, material::simple::{dielectric, lambertian, metal}, random::{random_float, random_in_range}, ray::Ray, vec3::{Vec3, vec3}};
+use crate::{camera::Camera, color::color_rgb, config::{Color, Film, Float}, hit::{Hit, bvh::{AxisAlignedBound, Bvh}, instance::Animate, sphere::{Sphere, sphere}}, material::simple::{dielectric, lambertian, lambertian_texture, metal}, random::{random_float, random_in_range}, ray::Ray, texture::TextureRepository, vec3::{Vec3, vec3}};
 
 pub struct Scene {
     pub objects: Box<dyn Hit + Send + Sync>,
     pub background_color: fn(Ray) -> Color,
-    pub cam: Camera
+    pub cam: Camera,
+    pub texture_repository: TextureRepository,
+}
+
+impl Default for Scene {
+    fn default() -> Self {
+        Scene { objects: Box::new(Vec::<Sphere>::new()), background_color: overcast_sky_background, cam: Camera::default(), texture_repository: TextureRepository::new() }
+    }
 }
 
 pub fn overcast_sky_background(r: Ray) -> Color {
@@ -23,11 +30,10 @@ pub fn simple_scene(film: &Film) -> Scene {
 
     let cam = Camera::new(film, vec3!(0, 0, 0), vec3!(0, 0, -1), vec3!(0, 1, 0), 90., 1., 0.6, (0., 0.).into());
 
-    Scene { objects: Box::new(vec![center_sphere, left_sphere, right_sphere, ground_sphere]), background_color: overcast_sky_background, cam }
+    Scene { objects: Box::new(vec![center_sphere, left_sphere, right_sphere, ground_sphere]), background_color: overcast_sky_background, cam, texture_repository: TextureRepository::new() }
 }
 
 pub fn random_scene(film: &Film) -> Scene {
-    //for _i in 0..16 { random_float(); }
     for _i in 0..40315 { random_float(); }
 
     let ground_sphere = Box::new(sphere((0., -1000., 0.), 1000., lambertian((1., 1., 0.))));
@@ -42,8 +48,8 @@ pub fn random_scene(film: &Film) -> Scene {
 
             if (Vec3::from(center) - vec3(4., 0.2, 0.)).length() > 0.9 {
                 let mat_rng = random_float();
+                // FIXME .into() after Color::random_in_range
                 if mat_rng < 0.8 {
-                    //objects.push(sphere(center, 0.2, lambertian(Color::random_in_range(0., 1.).into()))) ;
                     objects.push(Box::new(Animate {
                         offset_start: vec3(0., 0., 0.),
                         offset_end: vec3(0., random_in_range(0., 0.5), 0.),
@@ -61,5 +67,5 @@ pub fn random_scene(film: &Film) -> Scene {
 
     let cam = Camera::new(film, vec3!(13, 2, 3), vec3!(0, 0, 0), vec3!(0, 1, 0), 20., 10., 0.6, (0., 1.).into());
 
-    Scene { objects: Box::new(Bvh::from_slice(objects.as_mut_slice())), background_color: overcast_sky_background, cam }
+    Scene { objects: Box::new(Bvh::from_slice(objects.as_mut_slice())), background_color: overcast_sky_background, cam, texture_repository }
 }

@@ -1,4 +1,4 @@
-use crate::{config::Color, ray::Ray, vec3::{Point, Vec3}};
+use crate::{config::{Color, Float}, ray::Ray, scene::Scene, vec3::{Point, Vec3}};
 
 pub mod simple;
 
@@ -9,5 +9,5 @@ pub struct ScatterRecord {
 }
 
 pub trait Scatter {
-    fn scatter(&self, ray_in: Ray, pos: Point, normal: Vec3) -> Option<ScatterRecord>;
+    fn scatter(&self, scene: &Scene,ray_in: Ray, pos: Point, normal: Vec3, uv: (Float, Float)) -> Option<ScatterRecord>;
 }

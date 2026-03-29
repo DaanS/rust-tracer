@@ -48,3 +48,9 @@ impl Camera {
         ray(pos, direction, self.time.random())
     }
 }
+
+impl Default for Camera {
+    fn default() -> Self {
+        Camera::new(&Film::new((1, 1)), vec3!(0, 0, 0), vec3!(0, 0, -1), vec3!(0, 1, 0), 90., 1., 0., (0., 0.).into())
+    }
+}

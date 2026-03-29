@@ -1,4 +1,4 @@
-use crate::{config::{Color, Float}, material::{Scatter, ScatterRecord}, random::random_float, ray::{ray, Ray}, vec3::{dot, random_unit_vector, Point, Vec3}};
+use crate::{config::{Color, Float}, material::{Scatter, ScatterRecord}, random::random_float, ray::{Ray, ray}, scene::Scene, vec3::{Point, Vec3, dot, random_unit_vector}};
 
 // I've gone back and forth on keeping Material as an enum or a trait. The Scatter implementation for the enum
 // version is ugly as sin, but it's also efficient. When trying to turn it into a trait object, I ran into the issue
@@ -10,11 +10,13 @@ pub enum Material {
     #[default]
     None,
     Lambertian { color: Color },
+    LambertianTexture { texture_index: usize },
     Metal { color: Color, roughness: Float },
     Dielectric { ir: Float }
 }
 
 pub fn lambertian(color: (Float, Float, Float)) -> Material { Material::Lambertian { color: color.into() }}
+pub fn lambertian_texture(texture_index: usize) -> Material { Material::LambertianTexture { texture_index }}
 pub fn metal(color: (Float, Float, Float), roughness: Float) -> Material { Material::Metal { color: color.into(), roughness }}
 pub fn dielectric(ir: Float) -> Material { Material::Dielectric { ir }}
 
@@ -23,12 +25,19 @@ fn reflect(v: Vec3, n: Vec3) -> Vec3 {
 }
 
 impl Scatter for Material {
-    fn scatter(&self, ray_in: Ray, pos: Point, normal: Vec3) -> Option<ScatterRecord> {
+    fn scatter(&self, scene: &Scene, ray_in: Ray, pos: Point, normal: Vec3, uv: (Float, Float)) -> Option<ScatterRecord> {
         match self {
             Material::Lambertian{color} => {
                 let out_dir = normal + random_unit_vector();
                 Some(ScatterRecord {
                     attenuation: *color,
+                    out: ray(pos, if out_dir.near_zero() { normal } else { out_dir }, ray_in.time)
+                })
+            },
+            Material::LambertianTexture{texture_index} => {
+                let out_dir = normal + random_unit_vector();
+                Some(ScatterRecord {
+                    attenuation: scene.texture_repository.texture_value(*texture_index, uv, pos),
                     out: ray(pos, if out_dir.near_zero() { normal } else { out_dir }, ray_in.time)
                 })
             },
@@ -68,7 +77,7 @@ impl Scatter for Material {
 
 #[cfg(test)]
 mod tests {
-    use crate::{color::color_rgb, config::Float, hit::{Hit, sphere::sphere}, material::{Scatter, simple::{Material, dielectric, metal}}, ray::Ray, vec3::dot};
+    use crate::{color::color_rgb, config::Float, hit::{Hit, sphere::sphere}, material::{Scatter, simple::{Material, dielectric, metal}}, ray::Ray, scene::Scene, vec3::dot};
 
     #[test]
     fn test_scatter_anti_normal() {
@@ -77,19 +86,19 @@ mod tests {
         let r = ray!((-1, 0, 0) -> (1, 0, 0));
         let h = s.hit(r.clone(), 0.001, Float::INFINITY).unwrap();
 
-        let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
+        let scatter_rec = s.material.scatter(&Scene::default(), r.clone(), h.pos, h.normal, h.uv).unwrap();
         assert_eq!(scatter_rec.attenuation, (0.8, 0.6, 0.4).into());
         assert!(dot(h.normal, scatter_rec.out.direction) > 0.);
         assert_eq!(scatter_rec.out.origin, h.pos);
 
         s.material = metal((0.8, 0.6, 0.4), 0.);
-        let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
+        let scatter_rec = s.material.scatter(&Scene::default(), r.clone(), h.pos, h.normal, h.uv).unwrap();
         assert_eq!(scatter_rec.attenuation, (0.8, 0.6, 0.4).into());
         assert_eq!(scatter_rec.out.direction, -r.direction);
         assert_eq!(scatter_rec.out.origin, h.pos);
 
         s.material = dielectric(1.);
-        let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
+        let scatter_rec = s.material.scatter(&Scene::default(), r.clone(), h.pos, h.normal, h.uv).unwrap();
         assert_eq!(scatter_rec.attenuation, (1., 1., 1.).into());
         assert_eq!(scatter_rec.out.direction, r.direction);
         assert_eq!(scatter_rec.out.origin, h.pos);
@@ -101,13 +110,13 @@ mod tests {
 
         let r = ray!((-1, 0, 0) -> (1, 0, 0));
         let h = s.hit(r.clone(), 0.001, Float::INFINITY).unwrap();
-        let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
+        let scatter_rec = s.material.scatter(&Scene::default(), r.clone(), h.pos, h.normal, h.uv).unwrap();
         assert_eq!(scatter_rec.out.direction, r.direction);
         assert_eq!(scatter_rec.out.origin, h.pos);
 
         let r = ray!((-1.5, -1, 0) -> (1, 1, 0));
         let h = s.hit(r.clone(), 0.001, Float::INFINITY).unwrap();
-        let scatter_rec = s.material.scatter(r.clone(), h.pos, h.normal).unwrap();
+        let scatter_rec = s.material.scatter(&Scene::default(), r.clone(), h.pos, h.normal, h.uv).unwrap();
         assert!(dot(r.direction, scatter_rec.out.direction) > 0.);
         assert!(dot(h.normal, scatter_rec.out.direction) < 0.);
         assert!(dot(r.direction.normalize(), -h.normal) < dot(scatter_rec.out.direction, -h.normal));

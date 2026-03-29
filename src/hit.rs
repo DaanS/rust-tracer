@@ -9,7 +9,8 @@ pub struct HitRecord {
     pub t: Float,
     pub material: Material,
     pub normal: Vec3,
-    pub pos: Point
+    pub pos: Point,
+    pub uv: (Float, Float),
 }
 
 pub trait Hit {

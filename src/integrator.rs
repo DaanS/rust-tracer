@@ -1,7 +1,7 @@
 use std::{fs::File, io::{stdout, Write}, mem::replace, sync::{Arc, Mutex}, thread::Scope};
 
 use crate::{
-    color::color_rgb, config::{Color, Film, Float}, conversion::color_gamma, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::PixelSample, scene::Scene, util::is_power_of_2, window::MinifbWindow,
+    color::color_rgb, config::{Color, Film, Float}, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::PixelSample, scene::Scene, util::is_power_of_2, window::MinifbWindow,
 };
 
 pub trait RayEvaluator: Default {
@@ -19,7 +19,7 @@ impl RayEvaluator for SimpleRayEvaluator {
         if max_bounces == 0 { return color_rgb(0., 0., 0.); }
 
         match scene.objects.hit(r, 0.001, Float::INFINITY) {
-            Some(hit_record) => match hit_record.material.scatter(r, hit_record.pos, hit_record.normal) {
+            Some(hit_record) => match hit_record.material.scatter(scene, r, hit_record.pos, hit_record.normal, hit_record.uv) {
                 Some(scatter_record) => scatter_record.attenuation * self.li(scene, scatter_record.out, max_bounces - 1),
                 None => color_rgb(0., 0., 0.)
             },
@@ -257,7 +257,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
             }
         }
 
-        Png::write(tile_width, tile_height, local_film.to_rgb8(|s| color_gamma(s.mean())), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
+        Png::write(tile_width, tile_height, local_film.to_rgb8(SampleCollector::gamma_corrected_mean), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
         film.lock().unwrap().overwrite_with((topleft_x, topleft_y), &local_film);
         sample_count
     }

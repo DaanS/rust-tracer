@@ -1,6 +1,6 @@
 
 use crate::{
-    config::Float, hit::{bvh::AABB, Bound, Hit, HitRecord}, material::simple::Material, ray::Ray, vec3::{dot, Point}
+    config::{Float, PI}, hit::{Bound, Hit, HitRecord, bvh::AABB}, material::simple::Material, ray::Ray, texture::UV, vec3::{Point, dot}
 };
 
 #[derive(Clone, Copy, Default)]
@@ -35,8 +35,18 @@ impl Hit for Sphere {
 
         let pos = r.at(root);
         let normal = (pos - self.center) / self.radius;
+        let uv = self.uv(pos);
 
-        Some(HitRecord { t: root, material: self.material, normal, pos })
+        Some(HitRecord { t: root, material: self.material, normal, pos, uv })
+    }
+}
+
+impl UV for Sphere {
+    fn uv(&self, pos: Point) -> (Float, Float) {
+        let pos = (pos - self.center) / self.radius;
+        let phi = pos.z.atan2(pos.x);
+        let theta = pos.y.asin();
+        (1. - (phi + PI) / (2. * PI), (theta + PI / 2.) / PI)
     }
 }
 
@@ -67,6 +77,8 @@ impl Bound for Vec<Sphere> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{color::color_rgb, config::Color, texture::load_image_linear};
+
     use super::*;
     use approx::assert_ulps_eq;
 
@@ -83,7 +95,59 @@ mod tests {
         assert!(s.hit(ray!((-2, 0, 0) -> (1, 0, 0)), 0., Float::MAX).unwrap().normal == vec3!(-1, 0, 0));
         assert!(s.hit(ray!((2, 0, 0) -> (-1, 0, 0)), 0., Float::MAX).unwrap().normal == vec3!(1, 0, 0));
         assert!(s.hit(ray!((0, 0, 0) -> (1, 0, 0)), 0., Float::MAX).unwrap().normal == vec3!(1, 0, 0));
+    }
 
+    #[test]
+    fn test_uv_sphere() {
+        let s = sphere((0., 0., 0.), 1., Material::None);
+
+        let pos = vec3!(1., 0., 0.);
+        let (u, v) = s.uv(pos);
+        assert_ulps_eq!(u, 0.5);
+        assert_ulps_eq!(v, 0.5);
+
+        let pos = vec3!(0., 1., 0.);
+        let (u, v) = s.uv(pos);
+        assert_ulps_eq!(u, 0.5);
+        assert_ulps_eq!(v, 1.0);
+
+        let pos = vec3!(0., 0., 1.);
+        let (u, v) = s.uv(pos);
+        assert_ulps_eq!(u, 0.25);
+        assert_ulps_eq!(v, 0.5);
+
+        let pos = vec3!(-1., 0., 0.);
+        let (u, v) = s.uv(pos);
+        assert_ulps_eq!(u, 0.0);
+        assert_ulps_eq!(v, 0.5);
+
+        let pos = vec3!(0., -1., 0.);
+        let (u, v) = s.uv(pos);
+        assert_ulps_eq!(u, 0.5);
+        assert_ulps_eq!(v, 0.0);
+
+        let pos = vec3!(0., 0., -1.);
+        let (u, v) = s.uv(pos);
+        assert_ulps_eq!(u, 0.75);
+        assert_ulps_eq!(v, 0.5);
+    }
+
+    fn pixel_to_color(pixel: image::Rgb<u8>) -> Color {
+        color_rgb(pixel[0] as Float / 255., pixel[1] as Float / 255., pixel[2] as Float / 255.)
+    }
+
+    #[test]
+    fn test_textured_sphere() {
+        let mut repo = crate::texture::TextureRepository::new();
+        let idx = repo.load_texture("res/earthmap.jpg");
+        let img = load_image_linear("res/earthmap.jpg");
+        let s = sphere((0., 0., 0.), 1., crate::material::simple::lambertian_texture(idx));
+
+        let pos = vec3!(-1., 0., 0.);
+        let color = repo.texture_value(idx, s.uv(pos), pos);
+        let color2 = pixel_to_color(*img.get_pixel(0, img.height() / 2));
+
+        assert_eq!(color, color2);
     }
 
     #[test]
