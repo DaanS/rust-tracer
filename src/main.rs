@@ -42,6 +42,7 @@ fn main() {
 
     const WIDTH: usize = 800;
     const HEIGHT: usize = 450;
+    const MIN_SAMPLES: usize = 32;
     const MAX_SAMPLES: usize = 64;
 
     create_dir_all("out/jobs").unwrap();
@@ -52,7 +53,7 @@ fn main() {
     let init_dur = start.elapsed();
     let render_start = Instant::now();
 
-    MultiCoreTiledIntegrator::<SquareSampler, SimpleRayEvaluator, 50, 50, 8>::integrate(&scene, &mut film, 32, MAX_SAMPLES, 0.004);
+    MultiCoreTiledIntegrator::<SquareSampler, SimpleRayEvaluator, 50, 50, 8, MIN_SAMPLES, MAX_SAMPLES>::integrate(&scene, &mut film, 0.004);
 
     let render_dur = render_start.elapsed();
     let post_start = Instant::now();

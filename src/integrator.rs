@@ -46,18 +46,18 @@ fn print_progress(prog: Float) {
 // We iterate over pixels, generating subpixel samples using a Sampler. Scene contains a Camera that maps these
 // film-space samples to world-space rays. A RayEvaluator then computes the radiance contribution for each ray.
 
-pub trait Integrate {
-    fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float);
+pub trait Integrate<const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> {
+    fn integrate(scene: &Scene, film: &mut Film, variance_target: Float);
 }
 
-pub struct SimpleIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator> {
+pub struct SimpleIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator, const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> {
     _sampler: std::marker::PhantomData<Sampler>,
     _evaluator: std::marker::PhantomData<Evaluator>,
 }
 
-impl<Sampler: PixelSample, Evaluator: RayEvaluator> Integrate for SimpleIntegrator<Sampler, Evaluator> {
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> Integrate<MIN_SAMPLES, MAX_SAMPLES> for SimpleIntegrator<Sampler, Evaluator, MIN_SAMPLES, MAX_SAMPLES> {
     // TODO might be neater to factor out the window updates and progress printing
-    fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
+    fn integrate(scene: &Scene, film: &mut Film, variance_target: Float) {
         let mut win = MinifbWindow::new(film.width, film.height);
         let mut win2 = MinifbWindow::new(film.width, film.height);
         let mut win3 = MinifbWindow::new(film.width, film.height);
@@ -66,21 +66,21 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator> Integrate for SimpleIntegrat
         let sampler = Sampler::default();
         let evaluator = Evaluator::default();
 
-        for n in 0..max_samples {
+        for n in 0..MAX_SAMPLES {
             win.update(film, SampleCollector::gamma_corrected_mean);
             win2.update(film, SampleCollector::variance);
             win3.update(film, SampleCollector::avg_variance);
 
             for x in 0..film.width {
                 for y in 0..film.height {
-                    if n < min_samples || film.sample_collector((x, y)).max_variance() > variance_target {
+                    if n < MIN_SAMPLES || film.sample_collector((x, y)).max_variance() > variance_target {
                         sample_count += 1;
                         let (s, t) = sampler.pixel_sample((x, y));
                         let r = scene.cam.ray((s, t));
                         film.add_sample((x, y), evaluator.li(scene, r, 8));
                     }
                 }
-                print_progress((n * film.width * film.height + x * film.height) as Float / (film.width * film.height * max_samples) as Float);
+                print_progress((n * film.width * film.height + x * film.height) as Float / (film.width * film.height * MAX_SAMPLES) as Float);
             }
 
             if (n == 0) || is_power_of_2(n) {
@@ -91,24 +91,24 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator> Integrate for SimpleIntegrat
         }
 
         println!();
-        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
+        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * MAX_SAMPLES) as Float);
     }
 }
 
-pub struct SingleCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize> {
+pub struct SingleCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> {
     _sampler: std::marker::PhantomData<Sampler>,
     _evaluator: std::marker::PhantomData<Evaluator>,
 }
 
-impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize> SingleCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT> {
-    fn integrate_tile(scene: &Scene, film: &mut Film, tile_x: usize, tile_y: usize, min_samples: usize, max_samples: usize, variance_target: Float) -> usize {
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> SingleCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, MIN_SAMPLES, MAX_SAMPLES> {
+    fn integrate_tile(scene: &Scene, film: &mut Film, tile_x: usize, tile_y: usize, variance_target: Float) -> usize {
         let mut sample_count = 0;
         let sampler = Sampler::default();
         let evaluator = Evaluator::default();
         for y in 0..film.height {
             for x in 0..film.width {
-                for n in 0..max_samples {
-                    if n >= min_samples && film.sample_collector((x, y)).max_variance() <= variance_target { break; }
+                for n in 0..MAX_SAMPLES {
+                    if n >= MIN_SAMPLES && film.sample_collector((x, y)).max_variance() <= variance_target { break; }
 
                     sample_count += 1;
                     let (s, t) = sampler.pixel_sample((x + tile_x * film.width, y + tile_y * film.height));
@@ -120,8 +120,8 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         sample_count
     }
 }
-impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize> Integrate for SingleCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT> {
-    fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> Integrate<MIN_SAMPLES, MAX_SAMPLES> for SingleCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, MIN_SAMPLES, MAX_SAMPLES> {
+    fn integrate(scene: &Scene, film: &mut Film, variance_target: Float) {
         let mut win = MinifbWindow::new(film.width, film.height);
         let mut win2 = MinifbWindow::new(film.width, film.height);
         let mut win3 = MinifbWindow::new(film.width, film.height);
@@ -134,7 +134,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         for x in 0..tiles_hor {
             for y in 0..tiles_ver {
                 let mut tile_film = Film::new((TILE_WIDTH, TILE_HEIGHT));
-                sample_count += Self::integrate_tile(scene, &mut tile_film, x, y, min_samples, max_samples, variance_target);
+                sample_count += Self::integrate_tile(scene, &mut tile_film, x, y, variance_target);
                 film.overwrite_with((x * TILE_WIDTH, y * TILE_HEIGHT), &tile_film);
 
                 win.update(film, SampleCollector::gamma_corrected_mean);
@@ -146,7 +146,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         }
 
         println!();
-        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * max_samples) as Float);
+        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (film.width * film.height * MAX_SAMPLES) as Float);
     }
 }
 
@@ -204,41 +204,41 @@ impl Iterator for CoordinateRangeIterator {
     }
 }
 
-pub struct MultiCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> {
+pub struct MultiCoreTiledIntegrator<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize, const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> {
     _sampler: std::marker::PhantomData<Sampler>,
     _evaluator: std::marker::PhantomData<Evaluator>,
 }
 
-impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> MultiCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
-    pub fn integrate_inner(scene: &Scene, film: &Mutex<Film>, min_samples: usize, max_samples: usize, variance_target: Float) {
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize, const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> MultiCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT, MIN_SAMPLES, MAX_SAMPLES> {
+    pub fn integrate_inner(scene: &Scene, film: &Mutex<Film>, variance_target: Float) {
         let width = film.lock().unwrap().width;
         let height = film.lock().unwrap().height;
 
-        let queue = Self::queue_jobs(scene, film, (width, height), min_samples, max_samples, variance_target);
+        let queue = Self::queue_jobs(scene, film, (width, height), variance_target);
 
         let sample_count = Mutex::new(0);
         std::thread::scope(|scope| {
             Self::spawn_workers(scope, &queue, &sample_count);
-            Self::spawn_progress_thread(scope, &queue, film, &sample_count, (width, height), max_samples);
+            Self::spawn_progress_thread(scope, &queue, film, &sample_count, (width, height));
         });
 
         let sample_count = *sample_count.lock().unwrap();
 
         println!();
-        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (width * height * max_samples) as Float);
+        println!("{} samples collected, {:.2}%", sample_count, sample_count as Float * 100. / (width * height * MAX_SAMPLES) as Float);
     }
 
-    fn queue_jobs<'scene>(scene: &'scene Scene, film: &'scene Mutex<Film>, (width, height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float) -> JobQueue<'scene, impl FnOnce(&mut dyn Write) -> usize + Send + 'scene> {
+    fn queue_jobs<'scene>(scene: &'scene Scene, film: &'scene Mutex<Film>, (width, height): (usize, usize), variance_target: Float) -> JobQueue<'scene, impl FnOnce(&mut dyn Write) -> usize + Send + 'scene> {
         let tiles_hor = width / TILE_WIDTH + 1.min(width % TILE_WIDTH);
         let tiles_ver = height / TILE_HEIGHT + 1.min(height % TILE_HEIGHT);
 
         JobQueue::new(CoordinateRange(0..tiles_hor, 0..tiles_ver).iter().map(|(x, y)| {
             move |out: &mut dyn Write|
-                Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), min_samples, max_samples, variance_target, out)
+                Self::render_tile(scene, film, (x * TILE_WIDTH, y * TILE_HEIGHT), (TILE_WIDTH, TILE_HEIGHT), variance_target, out)
         }).collect())
     }
 
-    fn render_tile(scene: &Scene, film: &Mutex<Film>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), min_samples: usize, max_samples: usize, variance_target: Float, _out: &mut dyn Write) -> usize {
+    fn render_tile(scene: &Scene, film: &Mutex<Film>, (topleft_x, topleft_y): (usize, usize), (tile_width, tile_height): (usize, usize), variance_target: Float, _out: &mut dyn Write) -> usize {
         let mut sample_count = 0;
         let mut local_film = Film::new((tile_width, tile_height));
         let sampler = Sampler::default();
@@ -246,8 +246,8 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
         for y in 0..tile_height {
             for x in 0..tile_width {
-                for n in 0..max_samples {
-                    if n >= min_samples && local_film.sample_collector((x, y)).max_variance() <= variance_target { break; }
+                for n in 0..MAX_SAMPLES {
+                    if n >= MIN_SAMPLES && local_film.sample_collector((x, y)).max_variance() <= variance_target { break; }
 
                     sample_count += 1;
                     let (s, t) = sampler.pixel_sample((topleft_x + x, topleft_y + y));
@@ -277,12 +277,12 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         };
     }
 
-    fn spawn_progress_thread<'scope, 'env>(scope: &'scope Scope<'scope, 'env>, queue: &'scope JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'scope>, film: &'scope Mutex<Film>, sample_count: &'scope Mutex<usize>, (width, height): (usize, usize), max_samples: usize) {
+    fn spawn_progress_thread<'scope, 'env>(scope: &'scope Scope<'scope, 'env>, queue: &'scope JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'scope>, film: &'scope Mutex<Film>, sample_count: &'scope Mutex<usize>, (width, height): (usize, usize)) {
         scope.spawn(move || {
             let mut win = MinifbWindow::positioned(width, height, 0, 0);
             let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
             let mut win3 = MinifbWindow::positioned(width, height, width as isize, height as isize);
-            let total_samples = width * height * max_samples;
+            let total_samples = width * height * MAX_SAMPLES;
 
             while !queue.is_empty() {
                 {
@@ -303,13 +303,13 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
     }
 }
 
-impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize> Integrate for MultiCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT> {
-    fn integrate(scene: &Scene, film: &mut Film, min_samples: usize, max_samples: usize, variance_target: Float) {
+impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, const TILE_HEIGHT: usize, const WORKER_COUNT: usize, const MIN_SAMPLES: usize, const MAX_SAMPLES: usize> Integrate<MIN_SAMPLES, MAX_SAMPLES> for MultiCoreTiledIntegrator<Sampler, Evaluator, TILE_WIDTH, TILE_HEIGHT, WORKER_COUNT, MIN_SAMPLES, MAX_SAMPLES> {
+    fn integrate(scene: &Scene, film: &mut Film, variance_target: Float) {
         // the replace / into_inner is still a bit ugly, but it avoids cloning the film
 
         let film_mutex = Mutex::new(replace(film, Film::new((1, 1))));
 
-        Self::integrate_inner(scene, &film_mutex, min_samples, max_samples, variance_target);
+        Self::integrate_inner(scene, &film_mutex, variance_target);
 
         *film = film_mutex.into_inner().unwrap();
     }
