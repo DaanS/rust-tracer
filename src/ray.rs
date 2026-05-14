@@ -5,17 +5,18 @@ use crate::{vec3::{Point, Vec3}, config::Float};
 pub struct Ray {
     pub origin: Point,
     pub direction: Vec3,
+    pub inv_direction: Vec3,
     pub time: Float,
 }
 
 pub fn ray(origin: Point, direction: Vec3, time: Float) -> Ray {
-    Ray { origin, direction, time }
+    Ray { origin, direction, inv_direction: Vec3 { x: 1.0 / direction.x, y: 1.0 / direction.y, z: 1.0 / direction.z }, time }
 }
 
 #[cfg(test)]
 macro_rules! ray {
     (($ox:expr, $oy:expr, $oz:expr) -> ($dx:expr, $dy:expr, $dz:expr)) => {
-        Ray{ origin: vec3!($ox, $oy, $oz), direction: vec3!($dx, $dy, $dz), time: 0.0 }
+        crate::ray::ray(vec3!($ox, $oy, $oz), vec3!($dx, $dy, $dz), 0.0)
     };
 }
 
@@ -27,7 +28,7 @@ impl Ray {
 
 #[test]
 fn test_creation() {
-    let r1 = Ray { origin: vec3!(1, 0, 0), direction: vec3!(0, 1, 0), time: 0.0 };
+    let r1 = ray(vec3!(1, 0, 0), vec3!(0, 1, 0), 0.0);
     let r2 = ray!((1, 0, 0) -> (0, 1, 0));
     assert_eq!(r1, r2);
 }

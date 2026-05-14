@@ -53,7 +53,7 @@ impl AABB {
                 1 => (self.y.min, self.y.max),
                 _ => (self.z.min, self.z.max),
             };
-            let inv_d = 1.0 / r.direction[i];
+            let inv_d = r.inv_direction[i];
             let mut t0 = (min - r.origin[i]) * inv_d;
             let mut t1 = (max - r.origin[i]) * inv_d;
 
