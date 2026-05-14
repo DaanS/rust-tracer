@@ -70,5 +70,5 @@ pub fn random_scene(film: &Film) -> Scene {
 
     let cam = Camera::new(film, vec3!(13, 2, 3), vec3!(0, 0, 0), vec3!(0, 1, 0), 20., 10., 0.6, (0., 1.).into());
 
-    Scene { objects: Box::new(Bvh::from_slice(objects.as_mut_slice())), background_color: overcast_sky_background, cam, texture_repository: TextureRepository::new() }
+    Scene { objects: Box::new(Bvh::from_slice(objects.as_mut_slice())), background_color: overcast_sky_background, cam, texture_repository: texture_repository }
 }
