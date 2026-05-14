@@ -35,7 +35,10 @@ impl Hit for Sphere {
 
         let pos = r.at(root);
         let normal = (pos - self.center) / self.radius;
-        let uv = self.uv(pos);
+        let uv = match self.material {
+            Material::LambertianTexture { texture: _ } => self.uv(pos),
+            _ => (0.0, 0.0),
+        };
 
         Some(HitRecord { t: root, material: self.material, normal, pos, uv })
     }
