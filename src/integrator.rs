@@ -1,4 +1,4 @@
-use std::{fs::File, io::{stdout, Write}, mem::replace, sync::{Arc, Mutex}, thread::Scope};
+use std::{fs::File, io::{Write, stdout}, mem::replace, sync::{Arc, Mutex}, thread::Scope};
 
 use crate::{
     color::color_rgb, config::{Color, Film, Float}, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::PixelSample, scene::Scene, util::is_power_of_2, window::MinifbWindow,
@@ -279,6 +279,8 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
 
     fn spawn_progress_thread<'scope, 'env>(scope: &'scope Scope<'scope, 'env>, queue: &'scope JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'scope>, film: &'scope Mutex<Film>, sample_count: &'scope Mutex<usize>, (width, height): (usize, usize)) {
         scope.spawn(move || {
+            // TODO it might be neater to move the window creation so that the time it takes is counted towards initialization instead of rendering
+            // But since this doesn't run until after the workers are spawned, does it really affect the measured render time?
             let mut win = MinifbWindow::positioned(width, height, 0, 0);
             let mut win2 = MinifbWindow::positioned(width, height, width as isize, 0);
             let mut win3 = MinifbWindow::positioned(width, height, width as isize, height as isize);
@@ -297,7 +299,10 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                     win3.update(&film, SampleCollector::avg_variance);
                 }
 
-                std::thread::sleep(std::time::Duration::from_millis(1000));
+                for _ in 0..10 {
+                    if queue.is_empty() { break; }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
             }
         });
     }

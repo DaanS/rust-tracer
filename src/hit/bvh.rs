@@ -65,7 +65,14 @@ impl Hit for AABB {
                 return None;
             }
         }
-        Some(HitRecord{ t: t_min, material: Material::None, normal: vec3!(0., 0., 0.), pos: r.at(t_min), uv: (0., 0.) })
+
+        Some(HitRecord{ 
+            t: t_min, 
+            material: Material::None, 
+            normal: vec3!(0., 0., 0.), 
+            pos: r.at(t_min), 
+            uv: (0., 0.) 
+        })
     }
 }
 
@@ -146,13 +153,16 @@ impl Bvh {
 
 impl Hit for Bvh {
     fn hit(&self, r: Ray, t_min: Float, t_max: Float) -> Option<HitRecord> {
-        self.aabb.hit(r, t_min, t_max).and_then(|hit_record| {
-            let left_hit = self.left.hit(r, hit_record.t, t_max);
-            let right_hit = self.right.hit(r, hit_record.t, t_max);
+        self.aabb.hit(r, t_min, t_max).and_then(|_hit_record| {
+            let left_hit = self.left.hit(r, t_min, t_max);
+            let right_hit = self.right.hit(r, t_min, 
+                if let Some(ref left_hit) = left_hit { left_hit.t } else { t_max }
+            );
 
             match (left_hit, right_hit) {
-                (Some(l), Some(r)) => {
-                    if l.t < r.t { Some(l) } else { Some(r) }
+                (Some(_l), Some(r)) => {
+                    // if left was hit, right only checks for closer hits, so if it's hit too it must be closer than left
+                    Some(r)
                 },
                 (Some(l), None) => Some(l),
                 (None, Some(r)) => Some(r),
