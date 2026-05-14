@@ -1,4 +1,9 @@
-use std::{fs::File, io::{Write, stdout}, mem::replace, sync::{Arc, Mutex}, thread::Scope};
+#[cfg(not(feature = "bench"))]
+use std::fs::File;
+use std::io::{Write, stdout};
+use std::mem::replace;
+use std::sync::{Arc, Mutex};
+use std::thread::Scope;
 
 use crate::{
     color::color_rgb, config::{Color, Film, Float}, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::PixelSample, scene::Scene, util::is_power_of_2, window::MinifbWindow,
@@ -219,6 +224,8 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
         let sample_count = Mutex::new(0);
         std::thread::scope(|scope| {
             Self::spawn_workers(scope, &queue, &sample_count);
+
+            #[cfg(not(feature = "bench"))]
             Self::spawn_progress_thread(scope, &queue, film, &sample_count, (width, height));
         });
 
@@ -257,7 +264,9 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
             }
         }
 
+        #[cfg(not(feature = "bench"))]
         Png::write(tile_width, tile_height, local_film.to_rgb8(SampleCollector::gamma_corrected_mean), &format!("out/jobs/out-{topleft_x}-{topleft_y}.png"));
+
         film.lock().unwrap().overwrite_with((topleft_x, topleft_y), &local_film);
         sample_count
     }
@@ -265,7 +274,12 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
     fn spawn_workers<'scope, 'env>(scope: &'scope Scope<'scope, 'env>, queue: &'scope JobQueue<impl FnOnce(&mut dyn Write) -> usize + Send + 'scope>, sample_count: &'scope Mutex<usize>) {
         for i in 0..WORKER_COUNT {
             scope.spawn(move || {
+                #[cfg(not(feature = "bench"))]
                 let mut out = File::create(format!("out/worker-{i}.log")).unwrap();
+
+                #[cfg(feature = "bench")]
+                let mut out = std::io::sink();
+
                 writeln!(out, "thread {i} reporting").unwrap();
                 while let Some(job) = queue.get_job() {
                     let local_sample_count = job(&mut out);

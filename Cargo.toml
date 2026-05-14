@@ -13,6 +13,9 @@ minifb = "0.26.0"
 rand = "0.8.5"
 rand_xoshiro = "0.6.0"
 
+[features]
+bench = []
+
 [[bin]]
 name = "main"
 path = "src/main.rs"

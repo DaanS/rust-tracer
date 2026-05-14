@@ -23,7 +23,9 @@ mod texture;
 
 use std::{fs::create_dir_all, time::Instant};
 
-use crate::{config::{Film, Float}, film::SampleCollector, integrator::{Integrate, MultiCoreTiledIntegrator, SimpleRayEvaluator}, png::Png, ppm::Ppm, sampler::SquareSampler, scene::random_scene};
+use crate::{config::{Film, Float}, integrator::{Integrate, MultiCoreTiledIntegrator, SimpleRayEvaluator}, sampler::SquareSampler, scene::random_scene};
+#[cfg(not(feature = "bench"))]
+use crate::{film::SampleCollector, png::Png, ppm::Ppm};
 
 fn variance_stats(film: &Film) {
     let mut vals: Vec<Float> = film.pix.iter().map(|sc| sc.avg_variance().r).collect();
@@ -58,12 +60,15 @@ fn main() {
     let render_dur = render_start.elapsed();
     let post_start = Instant::now();
 
-    Ppm::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), "out/out.ppm");
+    #[cfg(not(feature = "bench"))]
+    {
+        Ppm::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), "out/out.ppm");
 
-    let base_path = format!("out/out-{}x{}@{}", WIDTH, HEIGHT, MAX_SAMPLES);
-    Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), &format!("{}-mean.png", base_path));
-    Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::variance), &format!("{}-variance.png", base_path));
-    Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::avg_variance), &format!("{}-avg-variance.png", base_path));
+        let base_path = format!("out/out-{}x{}@{}", WIDTH, HEIGHT, MAX_SAMPLES);
+        Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::gamma_corrected_mean), &format!("{}-mean.png", base_path));
+        Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::variance), &format!("{}-variance.png", base_path));
+        Png::write(WIDTH, HEIGHT, film.to_rgb8(SampleCollector::avg_variance), &format!("{}-avg-variance.png", base_path));
+    }
 
     variance_stats(&film);
 
