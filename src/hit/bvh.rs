@@ -1,6 +1,6 @@
 use std::{fmt::Debug, mem::{swap, take}, ops::Index};
 
-use crate::{config::Float, hit::{sphere::Sphere, Bound, Hit, HitRecord}, material::simple::Material, ray::Ray, util::Interval, vec3::Point};
+use crate::{config::Float, hit::{sphere::Sphere, Bound, Hit, HitRecord}, ray::Ray, util::Interval, vec3::Point};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AABB {
@@ -45,8 +45,8 @@ impl AABB {
     }
 }
 
-impl Hit for AABB {
-    fn hit(&self, r: Ray, mut t_min: Float, mut t_max: Float) -> Option<HitRecord> {
+impl AABB {
+    pub fn intersects(&self, r: Ray, mut t_min: Float, mut t_max: Float) -> bool {
         for i in 0..3 {
             let (min, max) = match i {
                 0 => (self.x.min, self.x.max),
@@ -62,17 +62,10 @@ impl Hit for AABB {
             if t1 < t_max { t_max = t1; }
 
             if t_max <= t_min {
-                return None;
+                return false;
             }
         }
-
-        Some(HitRecord{ 
-            t: t_min, 
-            material: Material::None, 
-            normal: vec3!(0., 0., 0.), 
-            pos: r.at(t_min), 
-            uv: (0., 0.) 
-        })
+        true
     }
 }
 
@@ -153,22 +146,24 @@ impl Bvh {
 
 impl Hit for Bvh {
     fn hit(&self, r: Ray, t_min: Float, t_max: Float) -> Option<HitRecord> {
-        self.aabb.hit(r, t_min, t_max).and_then(|_hit_record| {
-            let left_hit = self.left.hit(r, t_min, t_max);
-            let right_hit = self.right.hit(r, t_min, 
-                if let Some(ref left_hit) = left_hit { left_hit.t } else { t_max }
-            );
+        if !self.aabb.intersects(r, t_min, t_max) {
+            return None;
+        }
 
-            match (left_hit, right_hit) {
-                (Some(_l), Some(r)) => {
-                    // if left was hit, right only checks for closer hits, so if it's hit too it must be closer than left
-                    Some(r)
-                },
-                (Some(l), None) => Some(l),
-                (None, Some(r)) => Some(r),
-                (None, None) => None,
-            }
-        })
+        let left_hit = self.left.hit(r, t_min, t_max);
+        let right_hit = self.right.hit(r, t_min, 
+            if let Some(ref left_hit) = left_hit { left_hit.t } else { t_max }
+        );
+
+        match (left_hit, right_hit) {
+            (Some(_l), Some(r)) => {
+                // if left was hit, right only checks for closer hits, so if it's hit too it must be closer than left
+                Some(r)
+            },
+            (Some(l), None) => Some(l),
+            (None, Some(r)) => Some(r),
+            (None, None) => None,
+        }
     }
 }
 
@@ -190,9 +185,7 @@ impl Debug for Bvh {
 }
 
 #[cfg(test)]
-use approx::assert_ulps_eq;
-#[cfg(test)]
-use crate::hit::sphere::sphere;
+use crate::{hit::sphere::sphere, material::simple::Material};
 
 #[test]
 fn test_aabb() {
@@ -200,8 +193,8 @@ fn test_aabb() {
     let b = vec3!(1, 1, 1);
     let aabb = AABB::from_points(a, b);
 
-    assert_ulps_eq!(aabb.hit(ray!((0.5, 0.5, -0.5) -> (0, 0, 1)), 0., Float::MAX).unwrap().t, 0.5);
-    assert!(aabb.hit(ray!((1.5, 1.5, -0.5) -> (0, 0, 1)), 0., Float::MAX).is_none());
+    assert!(aabb.intersects(ray!((0.5, 0.5, -0.5) -> (0, 0, 1)), 0., Float::MAX));
+    assert!(!aabb.intersects(ray!((1.5, 1.5, -0.5) -> (0, 0, 1)), 0., Float::MAX));
 }
 
 #[test]

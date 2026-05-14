@@ -33,7 +33,11 @@ impl<T: Hit> Hit for Vec<T> {
     }
 }
 
+// TODO originally this was intended to capture the idea of 'something that can produce a bounding volume',
+// with the idea that a bounding volume could be anything that implements Hit.
+// But it turned out that, at least inside Bvh, Hit was inefficient, since it requires producing a full HitRecord.
+// Bvh was really only interested in boolean intersection checks for its AABBs.
 pub trait Bound {
-    type HitType: Hit;
+    type HitType;
     fn bound(&self) -> Self::HitType;
 }
