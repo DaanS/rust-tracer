@@ -48,11 +48,16 @@ impl Vec3 {
 }
 
 pub fn random_unit_vector() -> Vec3 {
-    let mut candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0));
-    while candidate.length_squared() > 1.0 {
-        candidate = vec3(random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0), random_in_range(-1.0, 1.0));
+    // Marsaglia sphere picking
+    loop {
+        // This first part is essentially random_vector_in_unit_disk, but we don't want to compute length_squared twice
+        let u = random_in_range(-1.0, 1.0);
+        let v = random_in_range(-1.0, 1.0);
+        let s = u * u + v * v;
+        if s >= 1.0 { continue; }
+        let factor = 2.0 * (1.0 - s).sqrt();
+        return vec3(u * factor, v * factor, 1.0 - 2.0 * s);
     }
-    candidate.normalize()
 }
 
 pub fn random_vector_in_unit_disk() -> Vec3 {
