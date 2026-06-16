@@ -61,15 +61,17 @@ impl Bound for Animate {
 mod tests {
     use crate::{config::Float, hit::{instance::{Animate, Translate}, sphere::sphere, Hit}, material::simple::lambertian, ray::ray};
 
+    #[test]
     fn test_translate() {
         let s = sphere((0., 0., -1.), 0.5, lambertian((0.7, 0.3, 0.3)));
         let t = Translate { offset: vec3!(0., 1., 0.), object: Box::new(s) };
+        let s2 = sphere((0., 1., -1.), 0.5, lambertian((0.7, 0.3, 0.3)));
 
-        let r1 = ray!((0, 1, 0) -> (0, 0, -1));
-        let r2 = ray!((0, 0, 0) -> (0, 0, -1));
-        assert_eq!(t.hit(r1, 0.001, Float::INFINITY), s.hit(r2, 0.001, Float::INFINITY));
+        let r = ray!((0, 1, 0) -> (0, 0, -1));
+        assert_eq!(t.hit(r, 0.001, Float::INFINITY), s2.hit(r, 0.001, Float::INFINITY));
     }
 
+    #[test]
     fn test_animate() {
         let s = sphere((0., 0., -1.), 0.5, lambertian((0.7, 0.3, 0.3)));
         let a = Animate {
@@ -78,11 +80,15 @@ mod tests {
             interpolation: Box::new(|t| t),
             object: Box::new(s)
         };
+        let s2 = sphere((0., 0.5, -1.), 0.5, lambertian((0.7, 0.3, 0.3)));
+        let s3 = sphere((0., 1., -1.), 0.5, lambertian((0.7, 0.3, 0.3)));
 
-        let r1 = ray!((0, 0, 0) -> (0, 0, -1));
+        let r = ray!((0, 0, 0) -> (0, 0, -1));
         let r2 = ray(vec3!(0., 0.5, 0.), vec3!(0., 0., -1.), 0.5);
         let r3 = ray(vec3!(0., 1., 0.), vec3!(0., 0., -1.), 1.0);
-        assert_eq!(a.hit(r2, 0.001, Float::INFINITY), s.hit(r1, 0.001, Float::INFINITY));
-        assert_eq!(a.hit(r3, 0.001, Float::INFINITY), s.hit(r1, 0.001, Float::INFINITY));
+
+        assert_eq!(a.hit(r, 0.001, Float::INFINITY), s.hit(r, 0.001, Float::INFINITY));
+        assert_eq!(a.hit(r2, 0.001, Float::INFINITY), s2.hit(r2, 0.001, Float::INFINITY));
+        assert_eq!(a.hit(r3, 0.001, Float::INFINITY), s3.hit(r3, 0.001, Float::INFINITY));
     }
 }
