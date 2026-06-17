@@ -10,7 +10,7 @@ thread_local! {
 }
 
 pub fn random_in_range(min: Float, max: Float) -> Float {
-    RNG.with(|rng| unsafe { (*rng.get()).gen_range(min..=max) })
+    RNG.with(|rng| unsafe { (*rng.get()).gen::<Float>() * (max - min) + min })
 }
 
 pub fn random_float() -> Float {
