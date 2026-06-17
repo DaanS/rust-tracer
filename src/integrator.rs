@@ -5,6 +5,7 @@ use std::mem::replace;
 use std::sync::{Arc, Mutex};
 use std::thread::Scope;
 
+use crate::random::random_float;
 use crate::{
     color::color_rgb, config::{Color, Film, Float}, film::SampleCollector, material::Scatter, png::Png, ray::Ray, sampler::PixelSample, scene::Scene, util::is_power_of_2, window::MinifbWindow,
 };
@@ -16,20 +17,31 @@ pub trait RayEvaluator: Default {
 #[derive(Clone, Copy, Default)]
 pub struct SimpleRayEvaluator;
 impl RayEvaluator for SimpleRayEvaluator {
-    // TODO we could probably carry depth and attenuation info in the ray itself
-    // maybe we could use this to make li non-recursive?
-    // but then how do we return the final result to the dispatcher?
-    // and would a larger ray struct negatively impact hit detection performance?
     fn li(&self, scene: &Scene, r: Ray, max_bounces: usize) -> Color {
-        if max_bounces == 0 { return color_rgb(0., 0., 0.); }
+        let mut attenuation = color_rgb(1., 1., 1.);
+        let mut r = r;
+        for bounce in 0..max_bounces {
+            match scene.objects.hit(r, 0.001, Float::INFINITY) {
+                Some(hit_record) => match hit_record.material.scatter(scene, r, hit_record.pos, hit_record.normal, hit_record.uv) {
+                    Some(scatter_record) => {
+                        attenuation *= scatter_record.attenuation;
 
-        match scene.objects.hit(r, 0.001, Float::INFINITY) {
-            Some(hit_record) => match hit_record.material.scatter(scene, r, hit_record.pos, hit_record.normal, hit_record.uv) {
-                Some(scatter_record) => scatter_record.attenuation * self.li(scene, scatter_record.out, max_bounces - 1),
-                None => color_rgb(0., 0., 0.)
-            },
-            None => { (scene.background_color)(r) }
+                        if bounce >= 3 {
+                            let survival = attenuation.r.max(attenuation.g).max(attenuation.b).min(0.95);
+                            if random_float() > survival {
+                                return color_rgb(0., 0., 0.);
+                            }
+                            attenuation = attenuation / survival;
+                        }
+
+                        r = scatter_record.out;
+                    },
+                    None => return color_rgb(0., 0., 0.)
+                },
+                None => return attenuation * (scene.background_color)(r),
+            }
         }
+        color_rgb(0., 0., 0.)
     }
 }
 
@@ -82,7 +94,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const MIN_SAMPLES: usize, co
                         sample_count += 1;
                         let (s, t) = sampler.pixel_sample((x, y));
                         let r = scene.cam.ray((s, t));
-                        film.add_sample((x, y), evaluator.li(scene, r, 8));
+                        film.add_sample((x, y), evaluator.li(scene, r, 64));
                     }
                 }
                 print_progress((n * film.width * film.height + x * film.height) as Float / (film.width * film.height * MAX_SAMPLES) as Float);
@@ -118,7 +130,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                     sample_count += 1;
                     let (s, t) = sampler.pixel_sample((x + tile_x * film.width, y + tile_y * film.height));
                     let r = scene.cam.ray((s, t));
-                    film.add_sample((x, y), evaluator.li(scene, r, 8));
+                    film.add_sample((x, y), evaluator.li(scene, r, 64));
                 }
             }
         }
@@ -259,7 +271,7 @@ impl<Sampler: PixelSample, Evaluator: RayEvaluator, const TILE_WIDTH: usize, con
                     sample_count += 1;
                     let (s, t) = sampler.pixel_sample((topleft_x + x, topleft_y + y));
                     let r = scene.cam.ray((s, t));
-                    local_film.add_sample((x, y), evaluator.li(scene, r, 8));
+                    local_film.add_sample((x, y), evaluator.li(scene, r, 64));
                 }
             }
         }
