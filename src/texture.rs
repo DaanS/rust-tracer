@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::{color::color_rgb, config::{Color, Float}, util::clamp, vec3::Point};
 use image::{ColorType, ConvertColorOptions, ImageReader, RgbImage, metadata::Cicp};
 
+// XXX does this make sense as a trait?
 pub trait UV {
     fn uv(&self, pos: Point) -> (Float, Float);
 }

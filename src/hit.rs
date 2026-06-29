@@ -1,6 +1,7 @@
 use crate::{config::Float, material::simple::Material, ray::Ray, vec3::{Point, Vec3}};
 
 pub mod sphere;
+pub mod quad;
 pub mod bvh;
 pub mod instance;
 

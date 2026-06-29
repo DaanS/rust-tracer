@@ -10,23 +10,49 @@ pub struct AABB {
 }
 
 impl AABB {
+    pub const MIN_LENGTH: Float = 1e-4;
+
     pub fn new(x: Interval, y: Interval, z: Interval) -> Self {
-        AABB { x, y, z }
+        let mut aabb = AABB { x, y, z };
+        aabb.pad_to_minimum();
+        aabb
     }
 
     pub fn from_points(a: Point, b: Point) -> Self {
-        AABB {
+        let mut aabb = AABB {
             x: if a.x < b.x { (a.x, b.x).into() } else { (b.x, a.x).into() },
             y: if a.y < b.y { (a.y, b.y).into() } else { (b.y, a.y).into() },
             z: if a.z < b.z { (a.z, b.z).into() } else { (b.z, a.z).into() }
-        }
+        };
+        aabb.pad_to_minimum();
+        aabb
     }
 
     pub fn enclosing(a: AABB, b: AABB) -> Self {
-        AABB {
+        let mut aabb = AABB {
             x: Interval::enclosing(a.x, b.x),
             y: Interval::enclosing(a.y, b.y),
             z: Interval::enclosing(a.z, b.z),
+        };
+        aabb.pad_to_minimum();
+        aabb
+    }
+
+    fn pad_to_minimum(&mut self) {
+        if self.x.length() < Self::MIN_LENGTH {
+            let mid = (self.x.min + self.x.max) / 2.;
+            self.x.min = mid - Self::MIN_LENGTH / 2.;
+            self.x.max = mid + Self::MIN_LENGTH / 2.;
+        }
+        if self.y.length() < Self::MIN_LENGTH {
+            let mid = (self.y.min + self.y.max) / 2.;
+            self.y.min = mid - Self::MIN_LENGTH / 2.;
+            self.y.max = mid + Self::MIN_LENGTH / 2.;
+        }
+        if self.z.length() < Self::MIN_LENGTH {
+            let mid = (self.z.min + self.z.max) / 2.;
+            self.z.min = mid - Self::MIN_LENGTH / 2.;
+            self.z.max = mid + Self::MIN_LENGTH / 2.;
         }
     }
 
@@ -195,6 +221,11 @@ fn test_aabb() {
 
     assert!(aabb.intersects(ray!((0.5, 0.5, -0.5) -> (0, 0, 1)), 0., Float::MAX));
     assert!(!aabb.intersects(ray!((1.5, 1.5, -0.5) -> (0, 0, 1)), 0., Float::MAX));
+
+    let c = vec3!(1, 1, 0);
+    let aabb2 = AABB::from_points(a, c);
+    assert!(aabb2.intersects(ray!((0.5, 0.5, -0.5) -> (0, 0, 1)), 0., Float::MAX));
+    assert!(!aabb2.intersects(ray!((1.5, 1.5, -0.5) -> (0, 0, 1)), 0., Float::MAX));
 }
 
 #[test]

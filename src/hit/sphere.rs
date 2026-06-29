@@ -193,11 +193,11 @@ mod tests {
 
         let v_empty: Vec<Sphere> = vec![];
         let aabb_empty = v_empty.bound();
-        assert_ulps_eq!(aabb_empty.x.min, 0.);
-        assert_ulps_eq!(aabb_empty.x.max, 0.);
-        assert_ulps_eq!(aabb_empty.y.min, 0.);
-        assert_ulps_eq!(aabb_empty.y.max, 0.);
-        assert_ulps_eq!(aabb_empty.z.min, 0.);
-        assert_ulps_eq!(aabb_empty.z.max, 0.);
+        assert!(aabb_empty.x.min.abs() < AABB::MIN_LENGTH);
+        assert!(aabb_empty.x.max.abs() < AABB::MIN_LENGTH);
+        assert!(aabb_empty.y.min.abs() < AABB::MIN_LENGTH);
+        assert!(aabb_empty.y.max.abs() < AABB::MIN_LENGTH);
+        assert!(aabb_empty.z.min.abs() < AABB::MIN_LENGTH);
+        assert!(aabb_empty.z.max.abs() < AABB::MIN_LENGTH);
     }
 }
