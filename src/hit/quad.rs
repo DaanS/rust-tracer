@@ -1,6 +1,6 @@
 use approx::assert_ulps_eq;
 
-use crate::{config::Float, hit::{Bound, Hit, HitRecord, bvh::AABB}, material::simple::Material, ray::Ray, texture::UV, vec3::{Point, Vec3, cross, dot}};
+use crate::{config::Float, hit::{Bound, Hit, HitRecord, aabb::AABB}, material::simple::Material, ray::Ray, texture::UV, vec3::{Point, Vec3, cross, dot}};
 
 #[derive(Clone, Copy, Default)]
 pub struct Quad {

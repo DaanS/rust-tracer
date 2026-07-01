@@ -1,4 +1,4 @@
-use crate::{config::Float, hit::{bvh::{AxisAlignedBound, AABB}, Bound, Hit, HitRecord}, ray::Ray, vec3::Vec3};
+use crate::{config::Float, hit::{bvh::AxisAlignedBound, aabb::AABB, Bound, Hit, HitRecord}, ray::Ray, vec3::Vec3};
 
 #[inline(always)]
 fn translate_hit(r: Ray, offset: Vec3, object: &dyn Hit, t_min: Float, t_max: Float) -> Option<HitRecord> {
